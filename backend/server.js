@@ -85,7 +85,7 @@ app.get('/api/transactions', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM "TRANSACTION"'
+            'SELECT * FROM "TRANSACTION" ORDER BY t_id DESC'
         );
         res.json({
             success: true,
@@ -325,27 +325,73 @@ app.get('/api/dashboard', async (req, res) => {
 app.post('/api/deposit', async (req, res) => {
     let connection;
     try {
-        const { acc_id, amount } = req.body;
+        const { acc_id, amount, mode } = req.body;
+
+        const numAccId = Number(acc_id);
+        const numAmount = Number(amount);
+
+        if (!numAccId || isNaN(numAccId)) {
+            return res.status(400).json({
+                success: false,
+                error: 'A valid Account ID is required'
+            });
+        }
+
+        if (isNaN(numAmount) || numAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Deposit amount must be greater than zero'
+            });
+        }
 
         connection = await getConnection();
 
+        // 1. Generate next transaction ID using project convention: NVL(MAX(t_id), 700) + 1
+        const tidResult = await connection.execute(
+            'SELECT NVL(MAX(t_id), 700) + 1 AS NEW_TID FROM "TRANSACTION"'
+        );
+        const nextTid = tidResult.rows[0][0];
+
+        // 2. Insert into TRANSACTION table.
+        // TRG_VALIDATE_TRANSACTION validates account active status and existence.
+        // TRG_UPDATE_BALANCE automatically updates Account.balance by +amount.
         await connection.execute(
-            `BEGIN deposit_money(:p_acc_id,:p_amount); END;`,
+            `INSERT INTO "TRANSACTION" (t_id, acc_id, trans_date, "TYPE", amount, "MODE", status)
+             VALUES (:p_tid, :p_acc_id, SYSDATE, 'DEPOSIT', :p_amount, :p_mode, 'SUCCESS')`,
             {
-                p_acc_id: acc_id,
-                p_amount: amount
+                p_tid: nextTid,
+                p_acc_id: numAccId,
+                p_amount: numAmount,
+                p_mode: mode || 'ONLINE'
             }
         );
 
+        await connection.commit();
+
         res.json({
             success: true,
-            message: 'Deposit successful'
+            message: 'Deposit successful',
+            data: {
+                t_id: nextTid,
+                acc_id: numAccId,
+                amount: numAmount,
+                type: 'DEPOSIT'
+            }
         });
     } catch (error) {
-        console.error(error);
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in POST /api/deposit:', error.message);
+        let userMessage = error.message;
+        if (error.message && error.message.includes('ORA-20002')) {
+            userMessage = 'Account is not active';
+        } else if (error.message && error.message.includes('ORA-20004')) {
+            userMessage = 'Account not found';
+        }
         res.status(500).json({
             success: false,
-            error: error.message
+            error: userMessage
         });
     } finally {
         if (connection) await connection.close();
@@ -355,27 +401,75 @@ app.post('/api/deposit', async (req, res) => {
 app.post('/api/withdraw', async (req, res) => {
     let connection;
     try {
-        const { acc_id, amount } = req.body;
+        const { acc_id, amount, mode } = req.body;
+
+        const numAccId = Number(acc_id);
+        const numAmount = Number(amount);
+
+        if (!numAccId || isNaN(numAccId)) {
+            return res.status(400).json({
+                success: false,
+                error: 'A valid Account ID is required'
+            });
+        }
+
+        if (isNaN(numAmount) || numAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Withdrawal amount must be greater than zero'
+            });
+        }
 
         connection = await getConnection();
 
+        // 1. Generate next transaction ID using project convention: NVL(MAX(t_id), 700) + 1
+        const tidResult = await connection.execute(
+            'SELECT NVL(MAX(t_id), 700) + 1 AS NEW_TID FROM "TRANSACTION"'
+        );
+        const nextTid = tidResult.rows[0][0];
+
+        // 2. Insert into TRANSACTION table.
+        // TRG_VALIDATE_TRANSACTION validates account active status, existence, and ensures amount <= balance.
+        // TRG_UPDATE_BALANCE automatically updates Account.balance by -amount.
         await connection.execute(
-            `BEGIN withdraw_money(:p_acc_id,:p_amount); END;`,
+            `INSERT INTO "TRANSACTION" (t_id, acc_id, trans_date, "TYPE", amount, "MODE", status)
+             VALUES (:p_tid, :p_acc_id, SYSDATE, 'WITHDRAWAL', :p_amount, :p_mode, 'SUCCESS')`,
             {
-                p_acc_id: acc_id,
-                p_amount: amount
+                p_tid: nextTid,
+                p_acc_id: numAccId,
+                p_amount: numAmount,
+                p_mode: mode || 'ONLINE'
             }
         );
 
+        await connection.commit();
+
         res.json({
             success: true,
-            message: 'Withdrawal successful'
+            message: 'Withdrawal successful',
+            data: {
+                t_id: nextTid,
+                acc_id: numAccId,
+                amount: numAmount,
+                type: 'WITHDRAWAL'
+            }
         });
     } catch (error) {
-        console.error(error);
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in POST /api/withdraw:', error.message);
+        let userMessage = error.message;
+        if (error.message && error.message.includes('ORA-20003')) {
+            userMessage = 'Insufficient account balance';
+        } else if (error.message && error.message.includes('ORA-20002')) {
+            userMessage = 'Account is not active';
+        } else if (error.message && error.message.includes('ORA-20004')) {
+            userMessage = 'Account not found';
+        }
         res.status(500).json({
             success: false,
-            error: error.message
+            error: userMessage
         });
     } finally {
         if (connection) await connection.close();

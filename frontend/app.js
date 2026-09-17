@@ -259,7 +259,7 @@ async function navigate(v){
   if(['dashboard','accounts','transactions','loans','cards','customers','branches','employees'].includes(v)){
     const map={dashboard:'/dashboard',accounts:'/accounts',transactions:'/transactions',loans:'/loans',cards:'/creditcards',customers:'/customers',branches:'/branches',employees:'/employees'};
     const key=v==='cards'?'cards':v;
-    if(!state.data[key]&&v!=='dashboard')await load(map[v],key);
+    if((!state.data[key] || v==='transactions' || v==='accounts') && v!=='dashboard')await load(map[v],key);
     if(v==='dashboard'&&!state.data.dashboard)await loadAll();
     renderView(true);
   }
