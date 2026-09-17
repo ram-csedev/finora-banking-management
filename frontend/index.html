@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>Finora — Personal Banking & Loan Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="brand-mark">F</div><div><strong>Finora</strong><span>Banking Suite</span></div></div>
+      <div class="sidebar-label">Workspace</div>
+      <nav id="nav">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span>Dashboard</button>
+        <button class="nav-item" data-view="accounts"><span>▣</span>Accounts</button>
+        <button class="nav-item" data-view="transactions"><span>↕</span>Transactions</button>
+        <button class="nav-item" data-view="loans"><span>◈</span>Loans</button>
+        <button class="nav-item" data-view="cards"><span>▤</span>Credit Cards</button>
+        <button class="nav-item" data-view="customers"><span>◎</span>Customers</button>
+        <button class="nav-item" data-view="branches"><span>⌖</span>Branches</button>
+        <button class="nav-item" data-view="employees"><span>♟</span>Employees</button>
+      </nav>
+      <div class="sidebar-label">Operations</div>
+      <nav>
+        <button class="nav-item" data-view="money"><span>＋</span>Deposit / Withdraw</button>
+        <button class="nav-item" data-view="tools"><span>✓</span>Banking Tools</button>
+      </nav>
+      <div class="sidebar-footer"><div class="status-dot"></div><div><b>Backend connected</b><small>Oracle + Node.js</small></div></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu">☰</button>
+        <div class="breadcrumb"><span>Personal Banking</span><b>/</b><strong id="pageTitle">Dashboard</strong></div>
+        <div class="top-actions"><div class="live-pill"><i></i> Live data</div><button class="icon-btn" id="refreshBtn" title="Refresh">↻</button><div class="avatar">P</div></div>
+      </header>
+      <div id="toast" class="toast"></div>
+      <section class="content" id="content"></section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
