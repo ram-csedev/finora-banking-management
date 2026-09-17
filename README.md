@@ -6,9 +6,9 @@ A relational database-based banking and loan management system developed as an a
 
 ### Project Team
 
-- **Frontend Development:** MADHUMITHA VINOD
-- **Backend & Database:** PRIYANSHI CHANDAK
-- **System Integration & Deployment:** RAM N
+- **Frontend Development:** MADHUMITHA VINOD - 25BCE1284
+- **Backend & Database:** PRIYANSHI CHANDAK  - 25BCE1305
+- **System Integration & Deployment:** RAM N - 25BCE1353
 
 ---
 
