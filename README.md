@@ -4,6 +4,14 @@ A relational database-based banking and loan management system developed as an a
 
 ---
 
+### Project Team
+
+- **Frontend Development:** MADHUMITHA VINOD
+- **Backend & Database:** PRIYANSHI CHANDAK
+- **System Integration & Deployment:** RAM N
+
+---
+
 ## Table of Contents
 
 - [Project Overview](#project-overview)
@@ -710,9 +718,9 @@ This project was developed as an academic Database Management Systems (DBMS) pro
 ## License & Contributors
 
 ### Contributors
-- **DBMS Academic Project Team**
-- **Repository / Commits:** Ram ([`ram.csedev@gmail.com`](mailto:ram.csedev@gmail.com))
-- **Database Schema & Architecture:** Priyanshi
+- **Frontend:** MADHUMITHA VINOD
+- **Backend & Database:** PRIYANSHI CHANDAK
+- **Connectivity & Hosting:** RAM N
 
 ### License
 This project was developed for academic and educational purposes.
