@@ -48,7 +48,6 @@ A relational database-based banking and loan management system developed as an a
 - [Security Considerations](#security-considerations)
 - [Future Improvements](#future-improvements)
 - [Academic Purpose](#academic-purpose)
-- [Screenshots](#screenshots)
 - [License & Contributors](#license--contributors)
 
 ---
@@ -710,14 +709,6 @@ This project was developed as an academic Database Management Systems (DBMS) pro
 - Advanced PL/SQL programming: triggers, stored procedures, and user-defined functions.
 - Multi-tier web integration linking a client-side interface to an enterprise SQL database.
 - Real-world cloud deployment with decoupled containerized databases and web services.
-
----
-
-## Screenshots
-
-<!-- Add Dashboard screenshot here -->
-<!-- Add Transactions ledger screenshot here -->
-<!-- Add Banking Tools screenshot here -->
 
 ---
 
