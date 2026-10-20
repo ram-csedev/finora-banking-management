@@ -69,3 +69,11 @@
 .cascade-override-label{display:flex;align-items:center;gap:8px;font-size:11px;color:#475569;cursor:pointer;margin:10px 0;padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px dashed #cbd5e1}
 .cascade-override-label input{cursor:pointer}
 .cascade-modal-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:18px;flex-wrap:wrap}
+
+/* Transaction Financial Card */
+.tx-financial-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin:12px 0}
+.tx-financial-breakdown{display:flex;align-items:center;justify-content:space-around;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;margin-top:8px}
+.tx-bal-col{display:flex;flex-direction:column;align-items:center;gap:2px}
+.tx-bal-col span{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.05em}
+.tx-bal-col b{font-size:14px;color:#0f172a}
+.tx-bal-arrow{font-size:16px;color:#94a3b8}

@@ -4,6 +4,26 @@ const cors = require('cors');
 const crypto = require('crypto');
 const { getConnection } = require('./db');
 
+const schemaColumnCache = new Map();
+
+async function tableHasColumn(connection, tableName, columnName) {
+    const key = `${tableName.toUpperCase()}.${columnName.toUpperCase()}`;
+    if (schemaColumnCache.has(key)) {
+        return schemaColumnCache.get(key);
+    }
+    try {
+        const res = await connection.execute(
+            `SELECT COUNT(*) FROM user_tab_cols WHERE table_name = :t AND column_name = :c`,
+            { t: tableName.toUpperCase(), c: columnName.toUpperCase() }
+        );
+        const has = (res.rows && res.rows[0] && res.rows[0][0] > 0);
+        schemaColumnCache.set(key, has);
+        return has;
+    } catch (_) {
+        return false;
+    }
+}
+
 const app = express();
 
 app.use(cors());
@@ -1394,6 +1414,13 @@ app.patch('/api/customers/:cid/status', async (req, res) => {
         }
 
         connection = await getConnection();
+        const hasCustStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
+        if (!hasCustStatus) {
+            return res.status(400).json({
+                success: false,
+                error: 'Customer status management requires a STATUS column, which is not present in the current database schema.'
+            });
+        }
         const check = await connection.execute('SELECT cid, status FROM Customer WHERE cid = :p_cid', { p_cid: cid });
         if (!check.rows || check.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
@@ -1435,13 +1462,28 @@ function computePreviewSignature(entity, id, counts) {
 }
 
 async function fetchCustomerPreview(connection, cid) {
-    const custRes = await connection.execute(
-        'SELECT cid, first_name, last_name, pan, status FROM Customer WHERE cid = :p_cid',
-        { p_cid: cid }
-    );
+    const hasCustStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
+    const hasLoanStatus = await tableHasColumn(connection, 'LOAN', 'STATUS');
+
+    const custSql = hasCustStatus
+        ? 'SELECT cid, first_name, last_name, pan, status FROM Customer WHERE cid = :p_cid'
+        : 'SELECT cid, first_name, last_name, pan FROM Customer WHERE cid = :p_cid';
+
+    const custRes = await connection.execute(custSql, { p_cid: cid });
     if (!custRes.rows || custRes.rows.length === 0) return null;
-    const [cId, fName, lName, pan, status] = custRes.rows[0];
+
+    let cId, fName, lName, pan, status;
+    if (hasCustStatus) {
+        [cId, fName, lName, pan, status] = custRes.rows[0];
+    } else {
+        [cId, fName, lName, pan] = custRes.rows[0];
+        status = 'ACTIVE';
+    }
     const fullName = `${fName} ${lName || ''}`.trim();
+
+    const activeLoanSql = hasLoanStatus
+        ? "(SELECT COUNT(*) FROM Loan WHERE cid = :p_cid AND status = 'ACTIVE') AS active_loans"
+        : "(SELECT COUNT(*) FROM Loan WHERE cid = :p_cid) AS active_loans";
 
     const countsRes = await connection.execute(`
         SELECT
@@ -1454,7 +1496,7 @@ async function fetchCustomerPreview(connection, cid) {
             (SELECT COUNT(*) FROM Responsible_For WHERE l_id IN (SELECT l_id FROM Loan WHERE cid = :p_cid) OR t_id IN (SELECT t_id FROM "TRANSACTION" WHERE acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid))) AS resp_count,
             (SELECT COUNT(*) FROM "TRANSACTION" WHERE acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)) AS tx_count,
             (SELECT NVL(SUM(balance), 0) FROM Account WHERE cid = :p_cid) AS total_balance,
-            (SELECT COUNT(*) FROM Loan WHERE cid = :p_cid AND status = 'ACTIVE') AS active_loans
+            ${activeLoanSql}
         FROM dual
     `, { p_cid: cid });
 
@@ -1495,23 +1537,30 @@ async function fetchCustomerPreview(connection, cid) {
         financial_protection_reason: protectionReason,
         can_delete: !hasProtectedHistory,
         preview_signature: computePreviewSignature('Customer', cid, counts),
-        recommended_alternative: {
+        recommended_alternative: hasCustStatus ? {
             action: 'deactivate_customer',
             label: 'Deactivate Customer Instead',
             api_endpoint: `/api/customers/${cid}/status`,
             method: 'PATCH',
             payload: { status: 'INACTIVE' }
-        }
+        } : null
     };
 }
 
 async function fetchAccountPreview(connection, acc_id) {
-    const accRes = await connection.execute(
-        'SELECT acc_id, balance, status, cid, acc_type FROM Account WHERE acc_id = :p_acc',
-        { p_acc: acc_id }
-    );
+    const hasAccStatus = await tableHasColumn(connection, 'ACCOUNT', 'STATUS');
+    const accSql = hasAccStatus
+        ? 'SELECT acc_id, balance, status, cid, acc_type FROM Account WHERE acc_id = :p_acc'
+        : 'SELECT acc_id, balance, cid, acc_type FROM Account WHERE acc_id = :p_acc';
+    const accRes = await connection.execute(accSql, { p_acc: acc_id });
     if (!accRes.rows || accRes.rows.length === 0) return null;
-    const [aId, balance, status, cid, accType] = accRes.rows[0];
+    let aId, balance, status, cid, accType;
+    if (hasAccStatus) {
+        [aId, balance, status, cid, accType] = accRes.rows[0];
+    } else {
+        [aId, balance, cid, accType] = accRes.rows[0];
+        status = 'ACTIVE';
+    }
 
     const countsRes = await connection.execute(`
         SELECT
@@ -1553,22 +1602,29 @@ async function fetchAccountPreview(connection, acc_id) {
         financial_protection_reason: protectionReason,
         can_delete: !hasProtectedHistory,
         preview_signature: computePreviewSignature('Account', acc_id, counts),
-        recommended_alternative: {
+        recommended_alternative: hasAccStatus ? {
             action: 'close_account',
             label: 'Close Account Instead',
             api_endpoint: `/api/accounts/${acc_id}/close`,
             method: 'POST'
-        }
+        } : null
     };
 }
 
 async function fetchCreditCardPreview(connection, pno) {
-    const cardRes = await connection.execute(
-        'SELECT pno, card_limit, type, status, cid FROM CreditCard WHERE pno = :p_pno',
-        { p_pno: pno }
-    );
+    const hasCardStatus = await tableHasColumn(connection, 'CREDITCARD', 'STATUS');
+    const cardSql = hasCardStatus
+        ? 'SELECT pno, card_limit, type, status, cid FROM CreditCard WHERE pno = :p_pno'
+        : 'SELECT pno, card_limit, type, cid FROM CreditCard WHERE pno = :p_pno';
+    const cardRes = await connection.execute(cardSql, { p_pno: pno });
     if (!cardRes.rows || cardRes.rows.length === 0) return null;
-    const [pNo, limit, type, status, cid] = cardRes.rows[0];
+    let pNo, limit, type, status, cid;
+    if (hasCardStatus) {
+        [pNo, limit, type, status, cid] = cardRes.rows[0];
+    } else {
+        [pNo, limit, type, cid] = cardRes.rows[0];
+        status = 'ACTIVE';
+    }
 
     const counts = {
         CreditCard: 1
@@ -1584,23 +1640,30 @@ async function fetchCreditCardPreview(connection, pno) {
         financial_protection_reason: null,
         can_delete: true,
         preview_signature: computePreviewSignature('CreditCard', pno, counts),
-        recommended_alternative: {
+        recommended_alternative: hasCardStatus ? {
             action: 'block_card',
             label: status === 'BLOCKED' ? 'Close Card Instead' : 'Block Card Instead',
             api_endpoint: `/api/creditcards/${pno}/status`,
             method: 'PATCH',
             payload: { status: status === 'BLOCKED' ? 'CLOSED' : 'BLOCKED' }
-        }
+        } : null
     };
 }
 
 async function fetchLoanPreview(connection, l_id) {
-    const loanRes = await connection.execute(
-        'SELECT l_id, amount, interest, term, status, cid, l_type FROM Loan WHERE l_id = :p_lid',
-        { p_lid: l_id }
-    );
+    const hasLoanStatus = await tableHasColumn(connection, 'LOAN', 'STATUS');
+    const loanSql = hasLoanStatus
+        ? 'SELECT l_id, amount, interest, term, status, cid, l_type FROM Loan WHERE l_id = :p_lid'
+        : 'SELECT l_id, amount, interest, term, cid, l_type FROM Loan WHERE l_id = :p_lid';
+    const loanRes = await connection.execute(loanSql, { p_lid: l_id });
     if (!loanRes.rows || loanRes.rows.length === 0) return null;
-    const [lid, amount, rate, tenure, status, cid, lType] = loanRes.rows[0];
+    let lid, amount, rate, tenure, status, cid, lType;
+    if (hasLoanStatus) {
+        [lid, amount, rate, tenure, status, cid, lType] = loanRes.rows[0];
+    } else {
+        [lid, amount, rate, tenure, cid, lType] = loanRes.rows[0];
+        status = 'ACTIVE';
+    }
 
     const respRes = await connection.execute(
         'SELECT COUNT(*) FROM Responsible_For WHERE l_id = :p_lid',
@@ -1623,25 +1686,32 @@ async function fetchLoanPreview(connection, l_id) {
             { entity: 'Employee & Branch', description: 'Assigned loan officers and branch will remain intact' }
         ],
         has_protected_history: isCurrentActive,
-        financial_protection_reason: isCurrentActive ? `Loan #${l_id} is currently ACTIVE. Settling the loan is recommended to preserve interest, tenure, and audit history.` : null,
+        financial_protection_reason: isCurrentActive ? `Loan #${l_id} is currently an active obligation. Settling the loan is recommended to preserve interest, tenure, and audit history.` : null,
         can_delete: true,
         preview_signature: computePreviewSignature('Loan', l_id, counts),
-        recommended_alternative: {
+        recommended_alternative: hasLoanStatus ? {
             action: 'settle_loan',
             label: 'Settle Loan Instead',
             api_endpoint: `/api/loans/${l_id}/settle`,
             method: 'POST'
-        }
+        } : null
     };
 }
 
 async function fetchEmployeePreview(connection, emp_id) {
-    const empRes = await connection.execute(
-        'SELECT emp_id, first_name, last_name, salary, b_id, status FROM Employee WHERE emp_id = :p_empid',
-        { p_empid: emp_id }
-    );
+    const hasEmpStatus = await tableHasColumn(connection, 'EMPLOYEE', 'STATUS');
+    const empSql = hasEmpStatus
+        ? 'SELECT emp_id, first_name, last_name, salary, b_id, status FROM Employee WHERE emp_id = :p_empid'
+        : 'SELECT emp_id, first_name, last_name, salary, b_id FROM Employee WHERE emp_id = :p_empid';
+    const empRes = await connection.execute(empSql, { p_empid: emp_id });
     if (!empRes.rows || empRes.rows.length === 0) return null;
-    const [empid, fname, lname, salary, bid, status] = empRes.rows[0];
+    let empid, fname, lname, salary, bid, status;
+    if (hasEmpStatus) {
+        [empid, fname, lname, salary, bid, status] = empRes.rows[0];
+    } else {
+        [empid, fname, lname, salary, bid] = empRes.rows[0];
+        status = 'ACTIVE';
+    }
     const fullName = `${fname} ${lname || ''}`.trim();
 
     const countsRes = await connection.execute(`
@@ -1670,23 +1740,30 @@ async function fetchEmployeePreview(connection, emp_id) {
         financial_protection_reason: null,
         can_delete: true,
         preview_signature: computePreviewSignature('Employee', emp_id, counts),
-        recommended_alternative: {
+        recommended_alternative: hasEmpStatus ? {
             action: 'deactivate_employee',
             label: 'Deactivate Employee Instead',
             api_endpoint: `/api/employees/${emp_id}/status`,
             method: 'PATCH',
             payload: { status: 'INACTIVE' }
-        }
+        } : null
     };
 }
 
 async function fetchBranchPreview(connection, b_id) {
-    const bRes = await connection.execute(
-        'SELECT b_id, branch_name, city, ifsc, status FROM Branch WHERE b_id = :p_bid',
-        { p_bid: b_id }
-    );
+    const hasBranchStatus = await tableHasColumn(connection, 'BRANCH', 'STATUS');
+    const branchSql = hasBranchStatus
+        ? 'SELECT b_id, branch_name, city, ifsc, status FROM Branch WHERE b_id = :p_bid'
+        : 'SELECT b_id, branch_name, city, ifsc FROM Branch WHERE b_id = :p_bid';
+    const bRes = await connection.execute(branchSql, { p_bid: b_id });
     if (!bRes.rows || bRes.rows.length === 0) return null;
-    const [bid, name, city, ifsc, status] = bRes.rows[0];
+    let bid, name, city, ifsc, status;
+    if (hasBranchStatus) {
+        [bid, name, city, ifsc, status] = bRes.rows[0];
+    } else {
+        [bid, name, city, ifsc] = bRes.rows[0];
+        status = 'ACTIVE';
+    }
 
     const countsRes = await connection.execute(`
         SELECT
@@ -1710,16 +1787,16 @@ async function fetchBranchPreview(connection, b_id) {
         counts,
         preserved: [],
         has_protected_history: hasEmployees,
-        financial_protection_reason: hasEmployees ? `Branch #${b_id} currently has ${empCount} active/assigned employee(s). Under corporate hierarchy rules, a branch with assigned personnel cannot be permanently deleted. Please reassign or delete employees first, or deactivate the branch.` : null,
+        financial_protection_reason: hasEmployees ? `Branch #${b_id} currently has ${empCount} employee(s) assigned. Under corporate hierarchy rules, a branch with assigned personnel cannot be permanently deleted. Please reassign or delete employees first${hasBranchStatus ? ', or deactivate the branch' : ''}.` : null,
         can_delete: !hasEmployees,
         preview_signature: computePreviewSignature('Branch', b_id, counts),
-        recommended_alternative: {
+        recommended_alternative: hasBranchStatus ? {
             action: 'deactivate_branch',
             label: 'Deactivate Branch Instead',
             api_endpoint: `/api/branches/${b_id}/status`,
             method: 'PATCH',
             payload: { status: 'INACTIVE' }
-        }
+        } : null
     };
 }
 
@@ -1780,6 +1857,103 @@ async function fetchCustomerPhonePreview(connection, cid, phone) {
         can_delete: true,
         preview_signature: computePreviewSignature('Customer_Phone', `${cid}:${phone}`, counts),
         recommended_alternative: null
+    };
+}
+
+async function fetchTransactionPreview(connection, t_id) {
+    const txRes = await connection.execute(
+        'SELECT t_id, acc_id, trans_date, "TYPE", amount, "MODE", status FROM "TRANSACTION" WHERE t_id = :p_tid',
+        { p_tid: t_id }
+    );
+    if (!txRes.rows || txRes.rows.length === 0) return null;
+    const [tid, accId, transDate, origType, amount, mode, origStatus] = txRes.rows[0];
+
+    const accRes = await connection.execute(
+        'SELECT acc_id, balance, status, acc_type FROM Account WHERE acc_id = :p_acc',
+        { p_acc: accId }
+    );
+    const hasAccount = (accRes.rows && accRes.rows.length > 0);
+    const [acc_id, currentBalance, accStatus, accType] = hasAccount ? accRes.rows[0] : [accId, 0, 'UNKNOWN', 'UNKNOWN'];
+
+    const respRes = await connection.execute(
+        'SELECT COUNT(*) FROM Responsible_For WHERE t_id = :p_tid',
+        { p_tid: t_id }
+    );
+    const respCount = respRes.rows[0][0];
+
+    const uType = (origType || '').toUpperCase();
+    const uStatus = (origStatus || '').toUpperCase();
+
+    let canDelete = true;
+    let balanceEffect = 0;
+    let newBalance = currentBalance;
+    let explanation = '';
+    let rejectionReason = null;
+
+    if (!hasAccount) {
+        canDelete = false;
+        rejectionReason = `Associated Account #${accId} was not found in the database.`;
+    } else if (uStatus === 'REVERSED') {
+        canDelete = false;
+        rejectionReason = `Transaction #${t_id} is already marked as REVERSED. Deleting it would compromise account ledger consistency.`;
+    } else if (uStatus === 'SUCCESS') {
+        if (uType === 'DEPOSIT' || uType === 'CREDIT') {
+            balanceEffect = -amount;
+            newBalance = currentBalance - amount;
+            if (currentBalance < amount) {
+                canDelete = false;
+                rejectionReason = `Insufficient balance (₹${currentBalance}) in Account #${accId} to reverse deposit of ₹${amount}.`;
+            } else {
+                explanation = `Reversing this deposit will deduct ₹${amount.toLocaleString('en-IN')} from Account #${accId} (Current: ₹${currentBalance.toLocaleString('en-IN')} → New: ₹${newBalance.toLocaleString('en-IN')}).`;
+            }
+        } else if (uType === 'WITHDRAWAL' || uType === 'WITHDRAW' || uType === 'DEBIT') {
+            balanceEffect = +amount;
+            newBalance = currentBalance + amount;
+            explanation = `Reversing this withdrawal will credit ₹${amount.toLocaleString('en-IN')} back to Account #${accId} (Current: ₹${currentBalance.toLocaleString('en-IN')} → New: ₹${newBalance.toLocaleString('en-IN')}).`;
+        } else {
+            canDelete = false;
+            rejectionReason = `Transaction type '${origType}' cannot be automatically reversed. Only DEPOSIT and WITHDRAWAL transactions are supported for financial reversal.`;
+        }
+    } else {
+        // Status is FAILED or PENDING: no balance was altered by TRG_UPDATE_BALANCE
+        balanceEffect = 0;
+        newBalance = currentBalance;
+        explanation = `Transaction status is '${origStatus}'. It did not alter account balance upon entry, so deleting it will remove the record without changing Account #${accId} balance.`;
+    }
+
+    const counts = {
+        Transaction: 1,
+        Responsible_For: respCount
+    };
+
+    return {
+        target: {
+            entity: 'Transaction',
+            id: t_id,
+            acc_id: accId,
+            type: uType,
+            amount,
+            mode,
+            status: uStatus,
+            trans_date: transDate,
+            label: `Transaction #${t_id} (${uType} ₹${amount.toLocaleString('en-IN')})`
+        },
+        counts,
+        current_balance: currentBalance,
+        new_balance: newBalance,
+        balance_effect: balanceEffect,
+        can_delete: canDelete,
+        explanation: explanation,
+        rejection_reason: rejectionReason,
+        preview_signature: computePreviewSignature('Transaction', t_id, {
+            Transaction: 1,
+            Responsible_For: respCount,
+            acc_id: accId,
+            amount,
+            type: uType,
+            status: uStatus,
+            current_balance: currentBalance
+        })
     };
 }
 
@@ -2213,12 +2387,167 @@ app.delete('/api/accounts/:acc_id', async (req, res) => {
     }
 });
 
-// --- TRANSACTIONS AUDIT PROTECTION & REVERSAL ---
+// --- TRANSACTIONS REVERSAL & PERMANENT DELETION ---
+const inFlightTxDeletes = new Set();
+
+app.get('/api/transactions/:t_id/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const t_id = Number(req.params.t_id);
+        if (!t_id || isNaN(t_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Transaction ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchTransactionPreview(connection, t_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/transactions/:t_id/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
 app.delete('/api/transactions/:t_id', async (req, res) => {
-    res.status(403).json({
-        success: false,
-        error: 'Hard deletion of completed financial transactions is strictly prohibited by banking audit regulations. Transaction records are permanent ledger entries. To correct an erroneous transaction, use the transaction reversal feature.'
-    });
+    let connection;
+    const t_id = Number(req.params.t_id);
+    if (!t_id || isNaN(t_id)) {
+        return res.status(400).json({ success: false, error: 'A valid Transaction ID is required' });
+    }
+
+    if (inFlightTxDeletes.has(t_id)) {
+        return res.status(409).json({
+            success: false,
+            error: `Deletion of Transaction #${t_id} is already in progress. Please do not submit duplicate requests.`
+        });
+    }
+
+    inFlightTxDeletes.add(t_id);
+
+    try {
+        connection = await getConnection();
+
+        // 1. Fetch preview and check staleness
+        const preview = await fetchTransactionPreview(connection, t_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} not found or already deleted.` });
+        }
+
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'Account balance or transaction state has changed since preview was generated. Please review the updated preview.'
+            });
+        }
+
+        if (!preview.can_delete) {
+            return res.status(400).json({
+                success: false,
+                error: preview.rejection_reason || 'This transaction cannot be safely reversed.'
+            });
+        }
+
+        // 2. Lock rows for update
+        const lockTx = await connection.execute(
+            'SELECT t_id, acc_id, "TYPE", amount, status FROM "TRANSACTION" WHERE t_id = :p_tid FOR UPDATE',
+            { p_tid: t_id }
+        );
+        if (!lockTx.rows || lockTx.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} not found.` });
+        }
+        const [origTid, accId, origType, amount, origStatus] = lockTx.rows[0];
+
+        const lockAcc = await connection.execute(
+            'SELECT acc_id, balance, status FROM Account WHERE acc_id = :p_acc FOR UPDATE',
+            { p_acc: accId }
+        );
+        if (!lockAcc.rows || lockAcc.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Associated Account #${accId} not found.` });
+        }
+        const [aId, accBal, accStatus] = lockAcc.rows[0];
+
+        const uType = (origType || '').toUpperCase();
+        const uStatus = (origStatus || '').toUpperCase();
+
+        let newBal = accBal;
+        if (uStatus === 'SUCCESS') {
+            if (uType === 'DEPOSIT' || uType === 'CREDIT') {
+                if (accBal < amount) {
+                    await connection.rollback();
+                    return res.status(400).json({
+                        success: false,
+                        error: `Insufficient account balance (₹${accBal}) to reverse deposit of ₹${amount}.`
+                    });
+                }
+                newBal = accBal - amount;
+                await connection.execute(
+                    'UPDATE Account SET balance = balance - :p_amt WHERE acc_id = :p_acc',
+                    { p_amt: amount, p_acc: accId }
+                );
+            } else if (uType === 'WITHDRAWAL' || uType === 'WITHDRAW' || uType === 'DEBIT') {
+                newBal = accBal + amount;
+                await connection.execute(
+                    'UPDATE Account SET balance = balance + :p_amt WHERE acc_id = :p_acc',
+                    { p_amt: amount, p_acc: accId }
+                );
+            } else {
+                await connection.rollback();
+                return res.status(400).json({
+                    success: false,
+                    error: `Unsupported transaction type '${origType}' for automatic reversal.`
+                });
+            }
+        }
+
+        // 3. Delete dependent rows in Responsible_For
+        await connection.execute(
+            'DELETE FROM Responsible_For WHERE t_id = :p_tid',
+            { p_tid: t_id }
+        );
+
+        // 4. Delete transaction row
+        const delRes = await connection.execute(
+            'DELETE FROM "TRANSACTION" WHERE t_id = :p_tid',
+            { p_tid: t_id }
+        );
+
+        if (delRes.rowsAffected === 0) {
+            await connection.rollback();
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} could not be deleted.` });
+        }
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Transaction #${t_id} deleted and financial effect reversed successfully.`,
+            data: {
+                t_id,
+                acc_id: accId,
+                type: uType,
+                amount,
+                previous_balance: accBal,
+                new_balance: newBal,
+                balance_effect: preview.balance_effect
+            }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/transactions/:t_id:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        inFlightTxDeletes.delete(t_id);
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
 });
 
 app.post('/api/transactions/:t_id/reverse', async (req, res) => {
@@ -2335,6 +2664,10 @@ app.post('/api/loans/:l_id/settle', async (req, res) => {
         }
 
         connection = await getConnection();
+        const hasLoanStatus = await tableHasColumn(connection, 'LOAN', 'STATUS');
+        if (!hasLoanStatus) {
+            return res.status(400).json({ success: false, error: 'Loan settlement requires a STATUS column, which is not present in the current database schema.' });
+        }
         const check = await connection.execute('SELECT l_id, status FROM Loan WHERE l_id = :p_lid', { p_lid: l_id });
         if (!check.rows || check.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
@@ -2564,6 +2897,10 @@ app.patch('/api/employees/:emp_id/status', async (req, res) => {
         }
 
         connection = await getConnection();
+        const hasEmpStatus = await tableHasColumn(connection, 'EMPLOYEE', 'STATUS');
+        if (!hasEmpStatus) {
+            return res.status(400).json({ success: false, error: 'Employee status management requires a STATUS column, which is not present in the current database schema.' });
+        }
         const check = await connection.execute('SELECT emp_id, status FROM Employee WHERE emp_id = :p_empid', { p_empid: emp_id });
         if (!check.rows || check.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
@@ -2686,16 +3023,21 @@ app.patch('/api/branches/:b_id/status', async (req, res) => {
         }
 
         connection = await getConnection();
+        const hasBranchStatus = await tableHasColumn(connection, 'BRANCH', 'STATUS');
+        if (!hasBranchStatus) {
+            return res.status(400).json({ success: false, error: 'Branch status management requires a STATUS column, which is not present in the current database schema.' });
+        }
         const check = await connection.execute('SELECT b_id, status FROM Branch WHERE b_id = :p_bid', { p_bid: b_id });
         if (!check.rows || check.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
         }
 
         if (cleanStatus === 'INACTIVE') {
-            const activeEmpCheck = await connection.execute(
-                "SELECT COUNT(*) FROM Employee WHERE b_id = :p_bid AND (status = 'ACTIVE' OR status IS NULL)",
-                { p_bid: b_id }
-            );
+            const hasEmpStatus = await tableHasColumn(connection, 'EMPLOYEE', 'STATUS');
+            const empCheckSql = hasEmpStatus
+                ? "SELECT COUNT(*) FROM Employee WHERE b_id = :p_bid AND (status = 'ACTIVE' OR status IS NULL)"
+                : "SELECT COUNT(*) FROM Employee WHERE b_id = :p_bid";
+            const activeEmpCheck = await connection.execute(empCheckSql, { p_bid: b_id });
             const activeEmpCount = activeEmpCheck.rows[0][0];
             if (activeEmpCount > 0) {
                 return res.status(400).json({

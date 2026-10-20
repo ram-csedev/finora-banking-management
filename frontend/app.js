@@ -243,10 +243,7 @@ function transactionsTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
-            ${canReverse
-              ? `<button class="btn-action btn-action-warning" onclick="promptReverseTx(${tId}, ${accId}, '${txType}', ${amt})" title="Reverse Transaction">Reverse</button>`
-              : `<span class="muted" style="font-size:10px">${status==='REVERSED'?'Reversed':'—'}</span>`
-            }
+            <button class="btn-action btn-action-outline-danger" onclick="promptDeleteTx(${tId}, ${accId}, '${txType}', ${amt}, '${status}')" title="Delete Transaction & Reverse Financial Effect">Delete</button>
           </div>
         </td>
       </tr>`;
@@ -562,93 +559,140 @@ async function openCascadeDeleteModal({
       const res = await api(previewUrl);
       const preview = res; // target, counts, preserved, has_protected_history, financial_protection_reason, recommended_alternative, preview_signature
 
-      // Build counts table for non-zero items
-      const counts = preview.counts || {};
-      const countEntries = Object.entries(counts).filter(([k, v]) => Number(v) > 0);
-      
-      let countsHtml = '';
-      if (countEntries.length > 0) {
-        countsHtml = `
-          <div class="cascade-impact-card">
-            <div class="cascade-impact-title">The following records will be affected:</div>
-            <div class="cascade-count-list">
-              ${countEntries.map(([k, v]) => `
-                <div class="cascade-count-row">
-                  <span>${title(k.replace('_', ' '))}</span>
-                  <span class="cascade-count-pill ${k === 'Transaction' ? 'pill-danger' : ''}">${v}</span>
-                </div>
-              `).join('')}
+      if (preview.target?.entity === 'Transaction') {
+        const uType = (preview.target.type || '').toUpperCase();
+        const isDep = (uType === 'DEPOSIT' || uType === 'CREDIT');
+
+        bodyEl.innerHTML = `
+          <div class="cascade-impact-card" style="margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <span style="font-weight:700;font-size:14px">Transaction #${preview.target.id}</span>
+              ${badge(preview.target.type, isDep ? 'success' : 'warning')}
+            </div>
+            <div style="font-size:13px;color:#475569;margin-bottom:4px">
+              Account: <strong>#${preview.target.acc_id}</strong> &nbsp;|&nbsp; Amount: <strong>${money(preview.target.amount)}</strong> &nbsp;|&nbsp; Status: ${statusBadge(preview.target.status)}
             </div>
           </div>
-        `;
-      }
 
-      // Preserved section
-      let preservedHtml = '';
-      if (preview.preserved && preview.preserved.length > 0) {
-        preservedHtml = `
-          <div class="cascade-preserved-box">
-            <b>🛡️ Preserved Records:</b>
-            <ul style="margin:4px 0 0;padding-left:18px">
-              ${preview.preserved.map(p => `<li><strong>${p.entity}:</strong> ${p.description}</li>`).join('')}
-            </ul>
-          </div>
-        `;
-      }
-
-      // Financial history audit alert & academic override toggle
-      let auditAlertHtml = '';
-      if (preview.has_protected_history) {
-        auditAlertHtml = `
-          <div class="cascade-audit-alert">
-            <b>⚠️ Protected Financial History:</b>
-            <div style="margin-top:4px">${preview.financial_protection_reason || 'This record contains protected transactions or active ledger balance.'}</div>
-            <div style="margin-top:6px;font-size:11px">
-              Under banking regulations, completed financial ledgers cannot be deleted. Choose the recommended alternative below, or enable demonstration override if performing classroom simulation.
+          <div class="tx-financial-card">
+            <div style="font-weight:600;font-size:13px;margin-bottom:6px;color:#1e293b">Financial Effect & Balance Reversal:</div>
+            <div style="font-size:13px;line-height:1.5;color:#334155;margin-bottom:10px">
+              ${preview.explanation}
+            </div>
+            <div class="tx-financial-breakdown">
+              <div class="tx-bal-col"><span>Current Balance</span><b>${money(preview.current_balance)}</b></div>
+              <div class="tx-bal-arrow">➔</div>
+              <div class="tx-bal-col"><span>New Balance</span><b>${money(preview.new_balance)}</b></div>
             </div>
           </div>
-          <label class="cascade-override-label">
-            <input type="checkbox" id="cascAcademicOverride" />
-            <span>Enable Academic Demonstration Override (force cascading deletion of ledger history)</span>
-          </label>
+
+          ${!preview.can_delete ? `
+            <div class="alert" style="margin:12px 0">
+              <b>Cannot delete transaction:</b> ${preview.rejection_reason}
+            </div>
+          ` : ''}
+
+          <div class="cascade-danger-warning" style="margin-top:12px">
+            🚨 <strong>Permanent Ledger Record Deletion:</strong> Deleting this transaction permanently removes it from the audit ledger. The financial effect will be corrected directly on Account #${preview.target.acc_id}.
+          </div>
         `;
-      }
 
-      const warningHtml = `
-        <div class="cascade-danger-warning">
-          🚨 <strong>Permanent Deletion Warning:</strong> This operation cannot be undone. All eligible dependent records will be permanently deleted from the database.
-        </div>
-      `;
+        actionsEl.innerHTML = `
+          <button class="btn btn-soft" onclick="closeCascadeModal()">No, Cancel</button>
+          <button class="btn btn-danger" id="cascDeleteAllBtn" ${!preview.can_delete ? 'disabled' : ''}>
+            Yes, Reverse & Delete
+          </button>
+        `;
+      } else {
+        // Standard cascade preview for other entities
+        // Build counts table for non-zero items
+        const counts = preview.counts || {};
+        const countEntries = Object.entries(counts).filter(([k, v]) => Number(v) > 0);
+        
+        let countsHtml = '';
+        if (countEntries.length > 0) {
+          countsHtml = `
+            <div class="cascade-impact-card">
+              <div class="cascade-impact-title">The following records will be affected:</div>
+              <div class="cascade-count-list">
+                ${countEntries.map(([k, v]) => `
+                  <div class="cascade-count-row">
+                    <span>${title(k.replace('_', ' '))}</span>
+                    <span class="cascade-count-pill ${k === 'Transaction' ? 'pill-danger' : ''}">${v}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `;
+        }
 
-      bodyEl.innerHTML = `
-        <p style="font-size:13px;line-height:1.5;margin-bottom:14px;color:#334155">
-          Permanently delete <strong>${preview.target?.label || entityTitle || entity}</strong>?
-        </p>
-        ${countsHtml}
-        ${preservedHtml}
-        ${auditAlertHtml}
-        ${warningHtml}
-      `;
+        // Preserved section
+        let preservedHtml = '';
+        if (preview.preserved && preview.preserved.length > 0) {
+          preservedHtml = `
+            <div class="cascade-preserved-box">
+              <b>🛡️ Preserved Records:</b>
+              <ul style="margin:4px 0 0;padding-left:18px">
+                ${preview.preserved.map(p => `<li><strong>${p.entity}:</strong> ${p.description}</li>`).join('')}
+              </ul>
+            </div>
+          `;
+        }
 
-      // Render buttons
-      let altBtnHtml = '';
-      if (preview.recommended_alternative) {
-        altBtnHtml = `
-          <button class="btn btn-primary" id="cascAltBtn">
-            ${preview.recommended_alternative.label}
+        // Financial history audit alert & academic override toggle
+        let auditAlertHtml = '';
+        if (preview.has_protected_history) {
+          auditAlertHtml = `
+            <div class="cascade-audit-alert">
+              <b>⚠️ Protected Financial History:</b>
+              <div style="margin-top:4px">${preview.financial_protection_reason || 'This record contains protected transactions or active ledger balance.'}</div>
+              <div style="margin-top:6px;font-size:11px">
+                Under banking regulations, completed financial ledgers cannot be deleted. Choose the recommended alternative below, or enable demonstration override if performing classroom simulation.
+              </div>
+            </div>
+            <label class="cascade-override-label">
+              <input type="checkbox" id="cascAcademicOverride" />
+              <span>Enable Academic Demonstration Override (force cascading deletion of ledger history)</span>
+            </label>
+          `;
+        }
+
+        const warningHtml = `
+          <div class="cascade-danger-warning">
+            🚨 <strong>Permanent Deletion Warning:</strong> This operation cannot be undone. All eligible dependent records will be permanently deleted from the database.
+          </div>
+        `;
+
+        bodyEl.innerHTML = `
+          <p style="font-size:13px;line-height:1.5;margin-bottom:14px;color:#334155">
+            Permanently delete <strong>${preview.target?.label || entityTitle || entity}</strong>?
+          </p>
+          ${countsHtml}
+          ${preservedHtml}
+          ${auditAlertHtml}
+          ${warningHtml}
+        `;
+
+        // Render buttons
+        let altBtnHtml = '';
+        if (preview.recommended_alternative) {
+          altBtnHtml = `
+            <button class="btn btn-primary" id="cascAltBtn">
+              ${preview.recommended_alternative.label}
+            </button>
+          `;
+        }
+
+        const isDeleteDisabled = (preview.has_protected_history === true);
+
+        actionsEl.innerHTML = `
+          <button class="btn btn-soft" onclick="closeCascadeModal()">No, Cancel</button>
+          ${altBtnHtml}
+          <button class="btn btn-danger" id="cascDeleteAllBtn" ${isDeleteDisabled ? 'disabled' : ''}>
+            Yes, Delete All
           </button>
         `;
       }
-
-      const isDeleteDisabled = (preview.has_protected_history === true);
-
-      actionsEl.innerHTML = `
-        <button class="btn btn-soft" onclick="closeCascadeModal()">No, Cancel</button>
-        ${altBtnHtml}
-        <button class="btn btn-danger" id="cascDeleteAllBtn" ${isDeleteDisabled ? 'disabled' : ''}>
-          Yes, Delete All
-        </button>
-      `;
 
       // Override checkbox behavior
       const overrideCb = $('#cascAcademicOverride');
@@ -680,7 +724,7 @@ async function openCascadeDeleteModal({
       // Confirm permanent delete handler
       deleteBtn.onclick = async () => {
         deleteBtn.disabled = true;
-        deleteBtn.textContent = 'Deleting...';
+        deleteBtn.textContent = 'Processing...';
         const isOverride = overrideCb ? overrideCb.checked : false;
 
         try {
@@ -696,7 +740,7 @@ async function openCascadeDeleteModal({
           if (onSuccess) await onSuccess();
         } catch (err) {
           deleteBtn.disabled = false;
-          deleteBtn.textContent = 'Yes, Delete All';
+          deleteBtn.textContent = preview.target?.entity === 'Transaction' ? 'Yes, Reverse & Delete' : 'Yes, Delete All';
           if (err.status === 409 || (err.message && (err.message.includes('changed') || err.message.includes('stale')))) {
             toast('Dependencies changed since preview. Refreshing preview...', false);
             await loadPreview();
@@ -706,9 +750,11 @@ async function openCascadeDeleteModal({
         }
       };
     } catch (err) {
+      let displayError = err.message || 'An unexpected error occurred';
+      displayError = displayError.replace(/Help:\s*https?:\/\/\S+/gi, '').trim();
       bodyEl.innerHTML = `
         <div class="alert" style="margin:16px 0">
-          <b>Error analyzing record:</b> ${err.message}
+          <b>Error analyzing record:</b> ${displayError}
         </div>
       `;
       actionsEl.innerHTML = `
@@ -931,6 +977,25 @@ async function promptDeleteAccount(accId, bal) {
     },
     onSuccess: async () => {
       await Promise.all([load('/accounts', 'accounts'), loadAll()]);
+      renderView(true);
+    }
+  });
+}
+
+async function promptDeleteTx(tId, accId, txType, amt, status) {
+  openCascadeDeleteModal({
+    entity: 'Transaction',
+    entityTitle: `Transaction #${tId} (${txType} ${money(amt)})`,
+    titleText: `Permanently Delete Transaction #${tId}?`,
+    previewUrl: `/transactions/${tId}/delete-preview`,
+    deleteUrl: `/transactions/${tId}`,
+    onAlternative: null,
+    onSuccess: async () => {
+      await Promise.all([
+        load('/transactions', 'transactions'),
+        load('/accounts', 'accounts'),
+        loadAll()
+      ]);
       renderView(true);
     }
   });
