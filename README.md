@@ -32,6 +32,11 @@ A relational database-based banking and loan management system developed as an a
   - [Database Functions](#database-functions)
   - [Dashboard Views](#dashboard-views)
 - [Transaction & Balance Logic](#transaction--balance-logic)
+- [Confirmation-Based Cascading Deletion](#confirmation-based-cascading-deletion)
+  - [Key Features](#key-features-1)
+  - [Supported Deletion Operations](#supported-deletion-operations)
+  - [Transaction Deletion and Balance Reversal](#transaction-deletion-and-balance-reversal)
+  - [Error Handling and Verification](#error-handling-and-verification)
 - [Sample Workflow](#sample-workflow)
 - [API Documentation](#api-documentation)
 - [Frontend Overview](#frontend-overview)
@@ -265,6 +270,57 @@ In a production-ready relational banking system, updating an account balance and
    - `TRG_UPDATE_BALANCE` fires **AFTER INSERT**, adjusting `Account.balance` up or down by the exact transaction amount.
 6. **Zero Double-Updates:** The backend relies entirely on the database trigger for the balance update, ensuring the balance is never updated twice.
 7. **Commit & Confirmation:** A database `COMMIT` finalizes the operation, and the response triggers an immediate UI table refresh.
+
+---
+
+## Confirmation-Based Cascading Deletion
+
+Finora implements a confirmation-based deletion workflow that allows users to inspect the consequences of permanently deleting database records before confirming the operation.
+
+### Key Features
+
+- **Deletion Preview:** Displays the selected record and the dependent records that may be affected by deletion.
+- **Dependency Counts:** Shows the number of records involved in the deletion across related tables.
+- **Preserved Records:** Identifies related customers, employees, and branches that will remain intact.
+- **Explicit Confirmation:** Requires the user to confirm the operation. Cancellation leaves the records unchanged.
+- **Referential Integrity:** Deletes eligible dependent records in an appropriate order to avoid foreign-key constraint violations.
+- **Financial-History Protection:** Blocks certain deletions when financial history or active obligations must be preserved.
+- **Academic Demonstration Override:** Provides an explicit override for permitted classroom simulations involving destructive deletion.
+- **Stale Preview Protection:** Uses a preview signature to reject deletion requests when the underlying data has changed since the preview was generated.
+
+### Supported Deletion Operations
+
+The preview and deletion workflow supports these eight entity types:
+
+1. Customers
+2. Accounts
+3. Credit cards
+4. Loans
+5. Employees
+6. Branches
+7. Nominees
+8. Customer phone numbers
+
+The backend checks dependencies and applies entity-specific rules. For example, deleting an employee can remove responsibility mappings and unassign associated customers without deleting those customers' accounts.
+
+### Transaction Deletion and Balance Reversal
+
+The Transactions page provides a Delete action with a confirmation preview.
+
+For supported successful deposits and withdrawals, the backend calculates the corresponding balance reversal before removing the transaction record:
+
+- **Deposit deletion:** Subtracts the original deposit amount from the account balance.
+- **Withdrawal deletion:** Adds the original withdrawal amount back to the account balance.
+
+The operation uses database transactions, row-level locking, and commit/rollback handling to prevent partial updates. Unsupported transaction types, already-reversed transactions, and operations that violate balance constraints are rejected.
+
+Transaction deletion permanently removes the corresponding ledger record. This behavior is intended for the academic demonstration and should not be treated as a substitute for audit-preserving financial reversal systems in production banking.
+
+### Error Handling and Verification
+
+The implementation includes safeguards for stale previews, duplicate deletion requests, insufficient balances, and protected financial history.
+
+The local Oracle XE test suite reported 26 passing assertions, covering deletion previews, transaction reversals, cancellation, failure handling, and baseline record preservation. Cloud database verification must be performed separately.
 
 ---
 
