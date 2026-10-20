@@ -166,7 +166,7 @@ function dashboard(){
   });
 
   return `
-<div class="hero"><div><div class="eyebrow">Overview</div><h1>Good evening, Priyanshi.</h1><p>Your banking operations at a glance. Data is read directly from the Oracle-backed API.</p></div><div class="hero-actions"><button class="btn btn-soft" onclick="navigate('money')">Quick transfer</button><button class="btn btn-primary" onclick="navigate('tools')">Banking tools</button></div></div>
+<div class="hero"><div><div class="eyebrow">Overview</div><p style="margin-top:4px">Your banking operations at a glance. Data is read directly from the Oracle-backed API.</p></div><div class="hero-actions"><button class="btn btn-soft" onclick="navigate('money')">Quick transfer</button><button class="btn btn-primary" onclick="navigate('tools')">Banking tools</button></div></div>
 <div class="stats">
 ${stat('Total Balance',money(d.total_balance),'Across all accounts','₹')} ${stat('Customers',num(d.total_customers),'Registered customers','◎')} ${stat('Loans',num(d.total_loans),money(d.total_loan_amount)+' total sanctioned','◈')} ${stat('Credit Cards',num(d.total_credit_cards),'Active portfolio','▤')}</div>
 <div class="grid-2">
