@@ -44,8 +44,10 @@ CREATE TABLE Branch (
     pincode VARCHAR2(10),
     ifsc VARCHAR2(20),
     contact VARCHAR2(15),
+    status VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_branch PRIMARY KEY (b_id),
-    CONSTRAINT uq_branch_ifsc UNIQUE (ifsc)
+    CONSTRAINT uq_branch_ifsc UNIQUE (ifsc),
+    CONSTRAINT chk_branch_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
 );
 
 -- Table 2: Employee (Child of Branch)
@@ -56,8 +58,10 @@ CREATE TABLE Employee (
     salary NUMBER(10,2),
     hire_date DATE,
     b_id NUMBER,
+    status VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_employee PRIMARY KEY (emp_id),
-    CONSTRAINT fk_employee_branch FOREIGN KEY (b_id) REFERENCES Branch (b_id)
+    CONSTRAINT fk_employee_branch FOREIGN KEY (b_id) REFERENCES Branch (b_id),
+    CONSTRAINT chk_employee_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
 );
 
 -- Table 3: Customer (Child of Employee)
@@ -71,9 +75,11 @@ CREATE TABLE Customer (
     pincode VARCHAR2(10),
     dob DATE,
     emp_id NUMBER,
+    status VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_customer PRIMARY KEY (cid),
     CONSTRAINT uq_customer_pan UNIQUE (pan),
-    CONSTRAINT fk_customer_employee FOREIGN KEY (emp_id) REFERENCES Employee (emp_id)
+    CONSTRAINT fk_customer_employee FOREIGN KEY (emp_id) REFERENCES Employee (emp_id),
+    CONSTRAINT chk_customer_status CHECK (status IN ('ACTIVE', 'INACTIVE'))
 );
 
 -- Table 4: Customer_Phone (Child of Customer)
@@ -88,11 +94,12 @@ CREATE TABLE Customer_Phone (
 CREATE TABLE Account (
     acc_id NUMBER,
     balance NUMBER(12,2) DEFAULT 0,
-    status VARCHAR2(20),
+    status VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     acc_type VARCHAR2(20),
     cid NUMBER,
     CONSTRAINT pk_account PRIMARY KEY (acc_id),
     CONSTRAINT chk_account_balance CHECK (balance >= 0),
+    CONSTRAINT chk_account_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'CLOSED')),
     CONSTRAINT fk_account_customer FOREIGN KEY (cid) REFERENCES Customer (cid)
 );
 
@@ -127,10 +134,11 @@ CREATE TABLE CreditCard (
     "TYPE" VARCHAR2(20),
     card_limit NUMBER(12,2),
     expiry DATE,
-    status VARCHAR2(20),
+    status VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     cvv VARCHAR2(4),
     cid NUMBER,
     CONSTRAINT pk_creditcard PRIMARY KEY (pno),
+    CONSTRAINT chk_creditcard_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'BLOCKED', 'CLOSED')),
     CONSTRAINT fk_creditcard_customer FOREIGN KEY (cid) REFERENCES Customer (cid)
 );
 
@@ -142,9 +150,11 @@ CREATE TABLE Loan (
     amount NUMBER(12,2),
     interest NUMBER(5,2),
     term NUMBER,
+    status VARCHAR2(20) DEFAULT 'ACTIVE' NOT NULL,
     CONSTRAINT pk_loan PRIMARY KEY (l_id),
     CONSTRAINT chk_loan_amount CHECK (amount > 0),
     CONSTRAINT chk_loan_interest CHECK (interest >= 0),
+    CONSTRAINT chk_loan_status CHECK (status IN ('ACTIVE', 'SETTLED', 'CLOSED')),
     CONSTRAINT fk_loan_customer FOREIGN KEY (cid) REFERENCES Customer (cid)
 );
 

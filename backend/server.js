@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const crypto = require('crypto');
 const { getConnection } = require('./db');
 
 const app = express();
@@ -41,7 +42,7 @@ app.get('/api/customers', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM Customer'
+            'SELECT * FROM Customer ORDER BY cid ASC'
         );
         res.json({
             success: true,
@@ -63,7 +64,7 @@ app.get('/api/accounts', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM Account'
+            'SELECT * FROM Account ORDER BY acc_id ASC'
         );
         res.json({
             success: true,
@@ -98,7 +99,9 @@ app.get('/api/transactions', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -107,7 +110,7 @@ app.get('/api/loans', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM Loan'
+            'SELECT * FROM Loan ORDER BY l_id ASC'
         );
         res.json({
             success: true,
@@ -120,7 +123,9 @@ app.get('/api/loans', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -129,7 +134,7 @@ app.get('/api/creditcards', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM CreditCard'
+            'SELECT * FROM CreditCard ORDER BY pno ASC'
         );
         res.json({
             success: true,
@@ -142,7 +147,9 @@ app.get('/api/creditcards', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -151,7 +158,7 @@ app.get('/api/branches', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM Branch'
+            'SELECT * FROM Branch ORDER BY b_id ASC'
         );
         res.json({
             success: true,
@@ -164,7 +171,9 @@ app.get('/api/branches', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -173,7 +182,7 @@ app.get('/api/employees', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM Employee'
+            'SELECT * FROM Employee ORDER BY emp_id ASC'
         );
         res.json({
             success: true,
@@ -186,7 +195,9 @@ app.get('/api/employees', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -195,7 +206,7 @@ app.get('/api/nominees', async (req, res) => {
     try {
         connection = await getConnection();
         const result = await connection.execute(
-            'SELECT * FROM Nominee'
+            'SELECT * FROM Nominee ORDER BY n_id ASC'
         );
         res.json({
             success: true,
@@ -208,7 +219,9 @@ app.get('/api/nominees', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -230,7 +243,9 @@ app.get('/api/owns', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -252,7 +267,9 @@ app.get('/api/responsible-for', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -318,7 +335,9 @@ app.get('/api/dashboard', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -394,7 +413,9 @@ app.post('/api/deposit', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -472,7 +493,9 @@ app.post('/api/withdraw', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -501,7 +524,9 @@ app.get('/api/account/:acc_id/balance', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -530,7 +555,9 @@ app.get('/api/customer/:cid/loan-eligibility', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -580,7 +607,9 @@ app.post('/api/transactions', async (req, res) => {
             error: error.message
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -721,7 +750,9 @@ app.post('/api/customers', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -838,7 +869,9 @@ app.post('/api/accounts', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -970,7 +1003,9 @@ app.post('/api/loans', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -1053,7 +1088,9 @@ app.post('/api/branches', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -1182,7 +1219,9 @@ app.post('/api/employees', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 
@@ -1330,7 +1369,1507 @@ app.post('/api/creditcards', async (req, res) => {
             error: userMessage
         });
     } finally {
-        if (connection) await connection.close();
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// ============================================================================
+// SAFE DELETE, CLOSE & DEACTIVATE ENDPOINTS
+// ============================================================================
+
+// --- CUSTOMER DEACTIVATE / ACTIVATE & SAFE DELETE ---
+app.patch('/api/customers/:cid/status', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        const { status } = req.body;
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid Customer ID is required' });
+        }
+        const cleanStatus = (status || '').trim().toUpperCase();
+        if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+            return res.status(400).json({ success: false, error: 'Status must be either ACTIVE or INACTIVE' });
+        }
+
+        connection = await getConnection();
+        const check = await connection.execute('SELECT cid, status FROM Customer WHERE cid = :p_cid', { p_cid: cid });
+        if (!check.rows || check.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
+        }
+
+        await connection.execute(
+            'UPDATE Customer SET status = :p_status WHERE cid = :p_cid',
+            { p_status: cleanStatus, p_cid: cid }
+        );
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Customer #${cid} status updated to ${cleanStatus}`,
+            data: { cid, status: cleanStatus }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in PATCH /api/customers/:cid/status:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// ============================================================================
+// CASCADE DELETE HELPERS & DEPENDENCY PREVIEW FUNCTIONS
+// ============================================================================
+
+function computePreviewSignature(entity, id, counts) {
+    const sortedCounts = Object.keys(counts).sort().reduce((acc, k) => {
+        acc[k] = counts[k];
+        return acc;
+    }, {});
+    const payload = JSON.stringify({ entity, id: String(id), counts: sortedCounts });
+    return crypto.createHash('sha256').update(payload).digest('hex');
+}
+
+async function fetchCustomerPreview(connection, cid) {
+    const custRes = await connection.execute(
+        'SELECT cid, first_name, last_name, pan, status FROM Customer WHERE cid = :p_cid',
+        { p_cid: cid }
+    );
+    if (!custRes.rows || custRes.rows.length === 0) return null;
+    const [cId, fName, lName, pan, status] = custRes.rows[0];
+    const fullName = `${fName} ${lName || ''}`.trim();
+
+    const countsRes = await connection.execute(`
+        SELECT
+            (SELECT COUNT(*) FROM Customer_Phone WHERE cid = :p_cid) AS phone_count,
+            (SELECT COUNT(*) FROM Account WHERE cid = :p_cid) AS acc_count,
+            (SELECT COUNT(*) FROM CreditCard WHERE cid = :p_cid) AS card_count,
+            (SELECT COUNT(*) FROM Loan WHERE cid = :p_cid) AS loan_count,
+            (SELECT COUNT(*) FROM Owns WHERE cid = :p_cid OR acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)) AS owns_count,
+            (SELECT COUNT(*) FROM Nominee WHERE cid = :p_cid OR acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)) AS nom_count,
+            (SELECT COUNT(*) FROM Responsible_For WHERE l_id IN (SELECT l_id FROM Loan WHERE cid = :p_cid) OR t_id IN (SELECT t_id FROM "TRANSACTION" WHERE acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid))) AS resp_count,
+            (SELECT COUNT(*) FROM "TRANSACTION" WHERE acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)) AS tx_count,
+            (SELECT NVL(SUM(balance), 0) FROM Account WHERE cid = :p_cid) AS total_balance,
+            (SELECT COUNT(*) FROM Loan WHERE cid = :p_cid AND status = 'ACTIVE') AS active_loans
+        FROM dual
+    `, { p_cid: cid });
+
+    const [phoneCount, accCount, cardCount, loanCount, ownsCount, nomCount, respCount, txCount, totalBalance, activeLoans] = countsRes.rows[0];
+
+    const counts = {
+        Customer: 1,
+        Customer_Phone: phoneCount,
+        Account: accCount,
+        CreditCard: cardCount,
+        Loan: loanCount,
+        Owns: ownsCount,
+        Nominee: nomCount,
+        Responsible_For: respCount,
+        Transaction: txCount
+    };
+
+    const hasProtectedHistory = (txCount > 0 || totalBalance > 0 || activeLoans > 0);
+    let protectionReason = null;
+    if (hasProtectedHistory) {
+        const parts = [];
+        if (txCount > 0) parts.push(`${txCount} completed transaction(s)`);
+        if (totalBalance > 0) parts.push(`active account balance of ₹${totalBalance}`);
+        if (activeLoans > 0) parts.push(`${activeLoans} active loan(s)`);
+        protectionReason = `Customer has protected financial history: ${parts.join(', ')}. Financial audit regulations require account and ledger history to be preserved.`;
+    }
+
+    return {
+        target: { entity: 'Customer', id: cid, label: `${fullName} (CID #${cid})`, status },
+        counts,
+        total_balance: totalBalance,
+        active_loans: activeLoans,
+        preserved: [
+            { entity: 'Branch & Staff', description: 'Assigned branch and employees will remain registered' },
+            { entity: 'Shared Nominees', description: 'Nominees linked to other accounts/customers will be preserved' }
+        ],
+        has_protected_history: hasProtectedHistory,
+        financial_protection_reason: protectionReason,
+        can_delete: !hasProtectedHistory,
+        preview_signature: computePreviewSignature('Customer', cid, counts),
+        recommended_alternative: {
+            action: 'deactivate_customer',
+            label: 'Deactivate Customer Instead',
+            api_endpoint: `/api/customers/${cid}/status`,
+            method: 'PATCH',
+            payload: { status: 'INACTIVE' }
+        }
+    };
+}
+
+async function fetchAccountPreview(connection, acc_id) {
+    const accRes = await connection.execute(
+        'SELECT acc_id, balance, status, cid, acc_type FROM Account WHERE acc_id = :p_acc',
+        { p_acc: acc_id }
+    );
+    if (!accRes.rows || accRes.rows.length === 0) return null;
+    const [aId, balance, status, cid, accType] = accRes.rows[0];
+
+    const countsRes = await connection.execute(`
+        SELECT
+            (SELECT COUNT(*) FROM Owns WHERE acc_id = :p_acc) AS owns_count,
+            (SELECT COUNT(*) FROM Nominee WHERE acc_id = :p_acc) AS nom_count,
+            (SELECT COUNT(*) FROM "TRANSACTION" WHERE acc_id = :p_acc) AS tx_count,
+            (SELECT COUNT(*) FROM Responsible_For WHERE t_id IN (SELECT t_id FROM "TRANSACTION" WHERE acc_id = :p_acc)) AS resp_count
+        FROM dual
+    `, { p_acc: acc_id });
+
+    const [ownsCount, nomCount, txCount, respCount] = countsRes.rows[0];
+
+    const counts = {
+        Account: 1,
+        Owns: ownsCount,
+        Nominee: nomCount,
+        Responsible_For: respCount,
+        Transaction: txCount
+    };
+
+    const hasProtectedHistory = (txCount > 0 || balance > 0 || balance < 0);
+    let protectionReason = null;
+    if (hasProtectedHistory) {
+        const parts = [];
+        if (txCount > 0) parts.push(`${txCount} completed transaction(s)`);
+        if (balance !== 0) parts.push(`non-zero balance of ₹${balance}`);
+        protectionReason = `Account #${acc_id} has protected financial history: ${parts.join(', ')}. Financial regulations prohibit hard deletion of accounts with historical transactions or active balances.`;
+    }
+
+    return {
+        target: { entity: 'Account', id: acc_id, label: `Account #${acc_id} (${accType || 'Savings'}, Bal: ₹${balance})`, status, balance, cid },
+        counts,
+        balance,
+        preserved: [
+            { entity: 'Customer', description: `Customer #${cid} will remain registered` },
+            { entity: 'Shared Nominees', description: 'Nominees linked to other accounts will be preserved' }
+        ],
+        has_protected_history: hasProtectedHistory,
+        financial_protection_reason: protectionReason,
+        can_delete: !hasProtectedHistory,
+        preview_signature: computePreviewSignature('Account', acc_id, counts),
+        recommended_alternative: {
+            action: 'close_account',
+            label: 'Close Account Instead',
+            api_endpoint: `/api/accounts/${acc_id}/close`,
+            method: 'POST'
+        }
+    };
+}
+
+async function fetchCreditCardPreview(connection, pno) {
+    const cardRes = await connection.execute(
+        'SELECT pno, card_limit, type, status, cid FROM CreditCard WHERE pno = :p_pno',
+        { p_pno: pno }
+    );
+    if (!cardRes.rows || cardRes.rows.length === 0) return null;
+    const [pNo, limit, type, status, cid] = cardRes.rows[0];
+
+    const counts = {
+        CreditCard: 1
+    };
+
+    return {
+        target: { entity: 'CreditCard', id: pno, label: `Credit Card ending in ${pno.slice(-4)} (${type}, Limit: ₹${limit})`, status, cid },
+        counts,
+        preserved: [
+            { entity: 'Customer', description: `Customer #${cid} and all accounts will remain intact` }
+        ],
+        has_protected_history: false,
+        financial_protection_reason: null,
+        can_delete: true,
+        preview_signature: computePreviewSignature('CreditCard', pno, counts),
+        recommended_alternative: {
+            action: 'block_card',
+            label: status === 'BLOCKED' ? 'Close Card Instead' : 'Block Card Instead',
+            api_endpoint: `/api/creditcards/${pno}/status`,
+            method: 'PATCH',
+            payload: { status: status === 'BLOCKED' ? 'CLOSED' : 'BLOCKED' }
+        }
+    };
+}
+
+async function fetchLoanPreview(connection, l_id) {
+    const loanRes = await connection.execute(
+        'SELECT l_id, amount, interest, term, status, cid, l_type FROM Loan WHERE l_id = :p_lid',
+        { p_lid: l_id }
+    );
+    if (!loanRes.rows || loanRes.rows.length === 0) return null;
+    const [lid, amount, rate, tenure, status, cid, lType] = loanRes.rows[0];
+
+    const respRes = await connection.execute(
+        'SELECT COUNT(*) FROM Responsible_For WHERE l_id = :p_lid',
+        { p_lid: l_id }
+    );
+    const respCount = respRes.rows[0][0];
+
+    const counts = {
+        Loan: 1,
+        Responsible_For: respCount
+    };
+
+    const isCurrentActive = (status === 'ACTIVE');
+
+    return {
+        target: { entity: 'Loan', id: l_id, label: `Loan #${l_id} (${lType || 'Personal'}, ₹${amount})`, status, cid },
+        counts,
+        preserved: [
+            { entity: 'Customer', description: `Customer #${cid} will remain intact` },
+            { entity: 'Employee & Branch', description: 'Assigned loan officers and branch will remain intact' }
+        ],
+        has_protected_history: isCurrentActive,
+        financial_protection_reason: isCurrentActive ? `Loan #${l_id} is currently ACTIVE. Settling the loan is recommended to preserve interest, tenure, and audit history.` : null,
+        can_delete: true,
+        preview_signature: computePreviewSignature('Loan', l_id, counts),
+        recommended_alternative: {
+            action: 'settle_loan',
+            label: 'Settle Loan Instead',
+            api_endpoint: `/api/loans/${l_id}/settle`,
+            method: 'POST'
+        }
+    };
+}
+
+async function fetchEmployeePreview(connection, emp_id) {
+    const empRes = await connection.execute(
+        'SELECT emp_id, first_name, last_name, salary, b_id, status FROM Employee WHERE emp_id = :p_empid',
+        { p_empid: emp_id }
+    );
+    if (!empRes.rows || empRes.rows.length === 0) return null;
+    const [empid, fname, lname, salary, bid, status] = empRes.rows[0];
+    const fullName = `${fname} ${lname || ''}`.trim();
+
+    const countsRes = await connection.execute(`
+        SELECT
+            (SELECT COUNT(*) FROM Responsible_For WHERE emp_id = :p_empid) AS resp_count,
+            (SELECT COUNT(*) FROM Customer WHERE emp_id = :p_empid) AS cust_count
+        FROM dual
+    `, { p_empid: emp_id });
+
+    const [respCount, custCount] = countsRes.rows[0];
+
+    const counts = {
+        Employee: 1,
+        Responsible_For: respCount
+    };
+
+    return {
+        target: { entity: 'Employee', id: emp_id, label: `${fullName} (Employee #${emp_id})`, status, b_id: bid },
+        counts,
+        customer_unlink_count: custCount,
+        preserved: [
+            { entity: 'Branch', description: `Branch #${bid} will remain active` },
+            { entity: 'Assigned Customers', description: `${custCount} customer(s) assigned to this employee will have their relationship unlinked safely (emp_id set to NULL), preserving all customer profiles and accounts.` }
+        ],
+        has_protected_history: false,
+        financial_protection_reason: null,
+        can_delete: true,
+        preview_signature: computePreviewSignature('Employee', emp_id, counts),
+        recommended_alternative: {
+            action: 'deactivate_employee',
+            label: 'Deactivate Employee Instead',
+            api_endpoint: `/api/employees/${emp_id}/status`,
+            method: 'PATCH',
+            payload: { status: 'INACTIVE' }
+        }
+    };
+}
+
+async function fetchBranchPreview(connection, b_id) {
+    const bRes = await connection.execute(
+        'SELECT b_id, branch_name, city, ifsc, status FROM Branch WHERE b_id = :p_bid',
+        { p_bid: b_id }
+    );
+    if (!bRes.rows || bRes.rows.length === 0) return null;
+    const [bid, name, city, ifsc, status] = bRes.rows[0];
+
+    const countsRes = await connection.execute(`
+        SELECT
+            (SELECT COUNT(*) FROM Employee WHERE b_id = :p_bid) AS emp_count,
+            (SELECT COUNT(*) FROM Responsible_For WHERE b_id = :p_bid) AS resp_count
+        FROM dual
+    `, { p_bid: b_id });
+
+    const [empCount, respCount] = countsRes.rows[0];
+
+    const counts = {
+        Branch: 1,
+        Employee: empCount,
+        Responsible_For: respCount
+    };
+
+    const hasEmployees = (empCount > 0);
+
+    return {
+        target: { entity: 'Branch', id: b_id, label: `${name} (Branch #${b_id}, ${city || ''})`, status },
+        counts,
+        preserved: [],
+        has_protected_history: hasEmployees,
+        financial_protection_reason: hasEmployees ? `Branch #${b_id} currently has ${empCount} active/assigned employee(s). Under corporate hierarchy rules, a branch with assigned personnel cannot be permanently deleted. Please reassign or delete employees first, or deactivate the branch.` : null,
+        can_delete: !hasEmployees,
+        preview_signature: computePreviewSignature('Branch', b_id, counts),
+        recommended_alternative: {
+            action: 'deactivate_branch',
+            label: 'Deactivate Branch Instead',
+            api_endpoint: `/api/branches/${b_id}/status`,
+            method: 'PATCH',
+            payload: { status: 'INACTIVE' }
+        }
+    };
+}
+
+async function fetchNomineePreview(connection, n_id) {
+    const nomRes = await connection.execute(
+        'SELECT n_id, first_name, last_name, relationship, acc_id, cid FROM Nominee WHERE n_id = :p_nid',
+        { p_nid: n_id }
+    );
+    if (!nomRes.rows || nomRes.rows.length === 0) return null;
+    const [nid, fname, lname, rel, accId, cid] = nomRes.rows[0];
+    const fullName = `${fname} ${lname || ''}`.trim();
+
+    const ownsRes = await connection.execute(
+        'SELECT COUNT(*) FROM Owns WHERE n_id = :p_nid',
+        { p_nid: n_id }
+    );
+    const ownsCount = ownsRes.rows[0][0];
+
+    const counts = {
+        Nominee: 1,
+        Owns: ownsCount
+    };
+
+    return {
+        target: { entity: 'Nominee', id: n_id, label: `${fullName} (Nominee #${n_id}, ${rel || 'Nominee'})`, acc_id: accId, cid },
+        counts,
+        preserved: [
+            { entity: 'Account', description: `Account #${accId} balance and history remain unaffected` },
+            { entity: 'Customer', description: `Customer #${cid} record remains unaffected` }
+        ],
+        has_protected_history: false,
+        financial_protection_reason: null,
+        can_delete: true,
+        preview_signature: computePreviewSignature('Nominee', n_id, counts),
+        recommended_alternative: null
+    };
+}
+
+async function fetchCustomerPhonePreview(connection, cid, phone) {
+    const phRes = await connection.execute(
+        'SELECT cid, phone FROM Customer_Phone WHERE cid = :p_cid AND phone = :p_phone',
+        { p_cid: cid, p_phone: phone }
+    );
+    if (!phRes.rows || phRes.rows.length === 0) return null;
+
+    const counts = {
+        Customer_Phone: 1
+    };
+
+    return {
+        target: { entity: 'Customer_Phone', id: `${cid}:${phone}`, label: `Phone ${phone} (Customer #${cid})`, cid, phone },
+        counts,
+        preserved: [
+            { entity: 'Customer', description: `Customer #${cid} profile, accounts, loans, and credit cards remain intact` }
+        ],
+        has_protected_history: false,
+        financial_protection_reason: null,
+        can_delete: true,
+        preview_signature: computePreviewSignature('Customer_Phone', `${cid}:${phone}`, counts),
+        recommended_alternative: null
+    };
+}
+
+// --- CUSTOMER PREVIEW & CASCADING DELETE ---
+app.get('/api/customers/:cid/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid Customer ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchCustomerPreview(connection, cid);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/customers/:cid/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/customers/:cid', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid Customer ID is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchCustomerPreview(connection, cid);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
+        }
+
+        // 1. Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The customer dependency state has changed since preview was generated. Please refresh the preview and review updated dependencies before confirming.'
+            });
+        }
+
+        // 2. Financial history guard
+        const isAcademicOverride = (req.body?.academic_override === true || req.query?.academic_override === 'true');
+        if (preview.has_protected_history && !isAcademicOverride) {
+            return res.status(400).json({
+                success: false,
+                protected_financial_history: true,
+                error: `Cannot permanently delete customer #${cid} with protected financial history (${preview.financial_protection_reason}). Please deactivate the customer instead to preserve audit records, or specify academic_override if authorized for educational demonstration.`,
+                recommended_alternative: preview.recommended_alternative,
+                preview
+            });
+        }
+
+        // 3. Multi-statement cascading deletion in strict foreign key order
+        // 3a. Transactions & transaction responsibilities (only if academic override was confirmed)
+        if (isAcademicOverride && preview.counts.Transaction > 0) {
+            await connection.execute(`
+                DELETE FROM Responsible_For 
+                WHERE t_id IN (
+                    SELECT t_id FROM "TRANSACTION" 
+                    WHERE acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)
+                )
+            `, { p_cid: cid });
+
+            await connection.execute(`
+                DELETE FROM "TRANSACTION" 
+                WHERE acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)
+            `, { p_cid: cid });
+        }
+
+        // 3b. Loans & loan responsibilities
+        await connection.execute(`
+            DELETE FROM Responsible_For 
+            WHERE l_id IN (SELECT l_id FROM Loan WHERE cid = :p_cid)
+        `, { p_cid: cid });
+        await connection.execute('DELETE FROM Loan WHERE cid = :p_cid', { p_cid: cid });
+
+        // 3c. Credit cards
+        await connection.execute('DELETE FROM CreditCard WHERE cid = :p_cid', { p_cid: cid });
+
+        // 3d. Ownership relationships (Owns)
+        await connection.execute(`
+            DELETE FROM Owns 
+            WHERE cid = :p_cid OR acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid)
+        `, { p_cid: cid });
+
+        // 3e. Unlink shared nominees so they remain registered for other customers/accounts
+        await connection.execute(`
+            UPDATE Nominee SET cid = NULL, acc_id = NULL 
+            WHERE (cid = :p_cid OR acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid))
+              AND n_id IN (SELECT n_id FROM Owns WHERE cid <> :p_cid)
+        `, { p_cid: cid });
+
+        // 3f. Delete unshared nominees
+        await connection.execute(`
+            DELETE FROM Nominee 
+            WHERE (cid = :p_cid OR acc_id IN (SELECT acc_id FROM Account WHERE cid = :p_cid))
+              AND n_id NOT IN (SELECT n_id FROM Owns WHERE cid <> :p_cid)
+        `, { p_cid: cid });
+
+        // 3g. Accounts
+        await connection.execute('DELETE FROM Account WHERE cid = :p_cid', { p_cid: cid });
+
+        // 3h. Customer Phones
+        await connection.execute('DELETE FROM Customer_Phone WHERE cid = :p_cid', { p_cid: cid });
+
+        // 3i. Customer root record
+        await connection.execute('DELETE FROM Customer WHERE cid = :p_cid', { p_cid: cid });
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Customer #${cid} and all permitted dependent records deleted successfully.`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/customers/:cid:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- CUSTOMER PHONES MANAGEMENT ---
+app.get('/api/customers/:cid/phones', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid Customer ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT cid, phone FROM Customer_Phone WHERE cid = :p_cid ORDER BY phone',
+            { p_cid: cid }
+        );
+        res.json({
+            success: true,
+            data: result.rows
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.post('/api/customers/:cid/phones', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        const { phone } = req.body;
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid Customer ID is required' });
+        }
+        if (!phone || !phone.trim()) {
+            return res.status(400).json({ success: false, error: 'Phone number is required' });
+        }
+        const cleanPhone = phone.trim();
+
+        connection = await getConnection();
+        await connection.execute(
+            'INSERT INTO Customer_Phone (cid, phone) VALUES (:p_cid, :p_phone)',
+            { p_cid: cid, p_phone: cleanPhone }
+        );
+        await connection.commit();
+        res.json({
+            success: true,
+            message: `Phone number ${cleanPhone} added for customer #${cid}`,
+            data: { cid, phone: cleanPhone }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        let msg = error.message;
+        if (msg.includes('PK_CUSTOMER_PHONE')) msg = 'This phone number is already registered for this customer.';
+        res.status(500).json({ success: false, error: msg });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.get('/api/customers/:cid/phones/:phone/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        const phone = req.params.phone;
+        if (!cid || isNaN(cid) || !phone) {
+            return res.status(400).json({ success: false, error: 'Valid Customer ID and Phone are required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchCustomerPhonePreview(connection, cid, phone);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Phone record ${phone} not found for customer #${cid}` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/customers/:cid/phones/:phone/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/customers/:cid/phones/:phone', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        const phone = req.params.phone;
+        if (!cid || isNaN(cid) || !phone) {
+            return res.status(400).json({ success: false, error: 'Valid Customer ID and Phone are required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchCustomerPhonePreview(connection, cid, phone);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Phone record ${phone} not found for customer #${cid}` });
+        }
+
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The phone record state has changed since preview was generated. Please refresh the preview before confirming.'
+            });
+        }
+
+        const result = await connection.execute(
+            'DELETE FROM Customer_Phone WHERE cid = :p_cid AND phone = :p_phone',
+            { p_cid: cid, p_phone: phone }
+        );
+        if (result.rowsAffected === 0) {
+            return res.status(404).json({ success: false, error: `Phone record ${phone} not found for customer #${cid}` });
+        }
+        await connection.commit();
+        res.json({
+            success: true,
+            message: `Phone number ${phone} removed for customer #${cid}`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- ACCOUNT CLOSE & SAFE DELETE ---
+app.post('/api/accounts/:acc_id/close', async (req, res) => {
+    let connection;
+    try {
+        const acc_id = Number(req.params.acc_id);
+        if (!acc_id || isNaN(acc_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Account ID is required' });
+        }
+
+        connection = await getConnection();
+        const check = await connection.execute('SELECT balance, status FROM Account WHERE acc_id = :p_acc_id', { p_acc_id: acc_id });
+        if (!check.rows || check.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Account #${acc_id} not found` });
+        }
+
+        const [balance, status] = check.rows[0];
+        if (status === 'CLOSED') {
+            return res.status(400).json({ success: false, error: `Account #${acc_id} is already closed.` });
+        }
+        if (balance > 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Cannot close account #${acc_id} with an outstanding balance of ₹${balance}. Balance must be zero before closing.`
+            });
+        }
+        if (balance < 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Cannot close account #${acc_id} with negative balance (₹${balance}).`
+            });
+        }
+
+        await connection.execute(
+            "UPDATE Account SET status = 'CLOSED' WHERE acc_id = :p_acc_id",
+            { p_acc_id: acc_id }
+        );
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Account #${acc_id} has been closed successfully. No further deposits or withdrawals can be performed.`,
+            data: { acc_id, status: 'CLOSED' }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in POST /api/accounts/:acc_id/close:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.get('/api/accounts/:acc_id/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const acc_id = Number(req.params.acc_id);
+        if (!acc_id || isNaN(acc_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Account ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchAccountPreview(connection, acc_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Account #${acc_id} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/accounts/:acc_id/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/accounts/:acc_id', async (req, res) => {
+    let connection;
+    try {
+        const acc_id = Number(req.params.acc_id);
+        if (!acc_id || isNaN(acc_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Account ID is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchAccountPreview(connection, acc_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Account #${acc_id} not found` });
+        }
+
+        // 1. Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The account dependency state has changed since preview was generated. Please refresh the preview and review updated dependencies before confirming.'
+            });
+        }
+
+        // 2. Financial history guard
+        const isAcademicOverride = (req.body?.academic_override === true || req.query?.academic_override === 'true');
+        if (preview.has_protected_history && !isAcademicOverride) {
+            return res.status(400).json({
+                success: false,
+                protected_financial_history: true,
+                error: `Cannot permanently delete account #${acc_id} with protected financial history (${preview.financial_protection_reason}). Please close the account instead, or specify academic_override if authorized for educational demonstration.`,
+                recommended_alternative: preview.recommended_alternative,
+                preview
+            });
+        }
+
+        // 3. Multi-statement cascading deletion in strict foreign key order
+        if (isAcademicOverride && preview.counts.Transaction > 0) {
+            await connection.execute(`
+                DELETE FROM Responsible_For 
+                WHERE t_id IN (SELECT t_id FROM "TRANSACTION" WHERE acc_id = :p_acc_id)
+            `, { p_acc_id: acc_id });
+
+            await connection.execute(`
+                DELETE FROM "TRANSACTION" WHERE acc_id = :p_acc_id
+            `, { p_acc_id: acc_id });
+        }
+
+        // 3a. Ownership
+        await connection.execute('DELETE FROM Owns WHERE acc_id = :p_acc_id', { p_acc_id: acc_id });
+
+        // 3b. Unlink shared nominees
+        await connection.execute(`
+            UPDATE Nominee SET acc_id = NULL 
+            WHERE acc_id = :p_acc_id 
+              AND n_id IN (SELECT n_id FROM Owns WHERE acc_id <> :p_acc_id)
+        `, { p_acc_id: acc_id });
+
+        // 3c. Delete unshared nominees
+        await connection.execute(`
+            DELETE FROM Nominee 
+            WHERE acc_id = :p_acc_id 
+              AND n_id NOT IN (SELECT n_id FROM Owns WHERE acc_id <> :p_acc_id)
+        `, { p_acc_id: acc_id });
+
+        // 3d. Delete account root record
+        await connection.execute('DELETE FROM Account WHERE acc_id = :p_acc_id', { p_acc_id: acc_id });
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Account #${acc_id} and dependent records deleted successfully.`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/accounts/:acc_id:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- TRANSACTIONS AUDIT PROTECTION & REVERSAL ---
+app.delete('/api/transactions/:t_id', async (req, res) => {
+    res.status(403).json({
+        success: false,
+        error: 'Hard deletion of completed financial transactions is strictly prohibited by banking audit regulations. Transaction records are permanent ledger entries. To correct an erroneous transaction, use the transaction reversal feature.'
+    });
+});
+
+app.post('/api/transactions/:t_id/reverse', async (req, res) => {
+    let connection;
+    try {
+        const t_id = Number(req.params.t_id);
+        if (!t_id || isNaN(t_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Transaction ID is required' });
+        }
+
+        connection = await getConnection();
+        const txQuery = await connection.execute(
+            'SELECT t_id, acc_id, "TYPE", amount, status FROM "TRANSACTION" WHERE t_id = :p_tid',
+            { p_tid: t_id }
+        );
+        if (!txQuery.rows || txQuery.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} not found` });
+        }
+
+        const [origTid, accId, origType, amount, origStatus] = txQuery.rows[0];
+        if (origStatus === 'REVERSED') {
+            return res.status(400).json({ success: false, error: `Transaction #${t_id} has already been reversed.` });
+        }
+        if (origStatus !== 'SUCCESS') {
+            return res.status(400).json({ success: false, error: `Only successful transactions can be reversed.` });
+        }
+
+        const accQuery = await connection.execute(
+            'SELECT balance, status FROM Account WHERE acc_id = :p_acc_id',
+            { p_acc_id: accId }
+        );
+        if (!accQuery.rows || accQuery.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Associated Account #${accId} not found` });
+        }
+        const [accBal, accStatus] = accQuery.rows[0];
+        if (accStatus === 'CLOSED') {
+            return res.status(400).json({ success: false, error: `Cannot reverse transaction on a closed account (#${accId}).` });
+        }
+
+        const uType = (origType || '').toUpperCase();
+        let revType;
+        if (uType === 'DEPOSIT' || uType === 'CREDIT') {
+            // Reversing a deposit requires a WITHDRAWAL of the amount
+            if (accBal < amount) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Insufficient account balance (₹${accBal}) to reverse deposit of ₹${amount}.`
+                });
+            }
+            revType = 'WITHDRAWAL';
+        } else if (uType === 'WITHDRAWAL' || uType === 'WITHDRAW' || uType === 'DEBIT') {
+            // Reversing a withdrawal requires a DEPOSIT of the amount
+            revType = 'DEPOSIT';
+        } else {
+            return res.status(400).json({
+                success: false,
+                error: `Transaction type '${origType}' cannot be automatically reversed.`
+            });
+        }
+
+        // Generate next t_id
+        const tidRes = await connection.execute('SELECT NVL(MAX(t_id), 700) + 1 AS NEW_TID FROM "TRANSACTION"');
+        const nextTid = tidRes.rows[0][0];
+
+        // Insert reversal transaction (TRG_UPDATE_BALANCE will update Account.balance by +amount or -amount)
+        await connection.execute(
+            `INSERT INTO "TRANSACTION" (t_id, acc_id, trans_date, "TYPE", amount, "MODE", status)
+             VALUES (:p_new_tid, :p_acc_id, SYSDATE, :p_rev_type, :p_amount, 'REVERSAL', 'SUCCESS')`,
+            {
+                p_new_tid: nextTid,
+                p_acc_id: accId,
+                p_rev_type: revType,
+                p_amount: amount
+            }
+        );
+
+        // Mark original transaction as REVERSED (UPDATE does not fire TRG_UPDATE_BALANCE, avoiding double updates)
+        await connection.execute(
+            "UPDATE \"TRANSACTION\" SET status = 'REVERSED' WHERE t_id = :p_orig_tid",
+            { p_orig_tid: t_id }
+        );
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Transaction #${t_id} reversed successfully. Offset transaction #${nextTid} (${revType} of ₹${amount}) created.`,
+            data: {
+                original_t_id: t_id,
+                reversal_t_id: nextTid,
+                acc_id: accId,
+                amount: amount,
+                type: revType
+            }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in POST /api/transactions/:t_id/reverse:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- LOAN SETTLE & SAFE DELETE ---
+app.post('/api/loans/:l_id/settle', async (req, res) => {
+    let connection;
+    try {
+        const l_id = Number(req.params.l_id);
+        if (!l_id || isNaN(l_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Loan ID is required' });
+        }
+
+        connection = await getConnection();
+        const check = await connection.execute('SELECT l_id, status FROM Loan WHERE l_id = :p_lid', { p_lid: l_id });
+        if (!check.rows || check.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
+        }
+
+        const currentStatus = check.rows[0][1];
+        if (currentStatus === 'SETTLED' || currentStatus === 'CLOSED') {
+            return res.status(400).json({ success: false, error: `Loan #${l_id} is already settled.` });
+        }
+
+        await connection.execute(
+            "UPDATE Loan SET status = 'SETTLED' WHERE l_id = :p_lid",
+            { p_lid: l_id }
+        );
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Loan #${l_id} has been marked as SETTLED. Record preserved in audit history.`,
+            data: { l_id, status: 'SETTLED' }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in POST /api/loans/:l_id/settle:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.get('/api/loans/:l_id/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const l_id = Number(req.params.l_id);
+        if (!l_id || isNaN(l_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Loan ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchLoanPreview(connection, l_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/loans/:l_id/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/loans/:l_id', async (req, res) => {
+    let connection;
+    try {
+        const l_id = Number(req.params.l_id);
+        if (!l_id || isNaN(l_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Loan ID is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchLoanPreview(connection, l_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
+        }
+
+        // Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The loan dependency state has changed since preview was generated. Please refresh the preview before confirming.'
+            });
+        }
+
+        // Cascade delete: loan responsibility rows first, then loan record
+        await connection.execute('DELETE FROM Responsible_For WHERE l_id = :p_lid', { p_lid: l_id });
+        await connection.execute('DELETE FROM Loan WHERE l_id = :p_lid', { p_lid: l_id });
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Loan #${l_id} and associated responsibility records deleted successfully`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/loans/:l_id:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- CREDIT CARD BLOCK / CLOSE / UNBLOCK ---
+app.patch('/api/creditcards/:pno/status', async (req, res) => {
+    let connection;
+    try {
+        const pno = req.params.pno;
+        const { status } = req.body;
+        if (!pno || !pno.trim()) {
+            return res.status(400).json({ success: false, error: 'A valid Card Number is required' });
+        }
+
+        const cleanStatus = (status || '').trim().toUpperCase();
+        if (!['ACTIVE', 'BLOCKED', 'CLOSED', 'INACTIVE'].includes(cleanStatus)) {
+            return res.status(400).json({ success: false, error: 'Status must be ACTIVE, BLOCKED, or CLOSED' });
+        }
+
+        connection = await getConnection();
+        const check = await connection.execute('SELECT pno, status FROM CreditCard WHERE pno = :p_pno', { p_pno: pno });
+        if (!check.rows || check.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Credit card not found' });
+        }
+
+        if (check.rows[0][1] === cleanStatus) {
+            return res.status(400).json({ success: false, error: `Credit card is already ${cleanStatus}.` });
+        }
+
+        await connection.execute(
+            'UPDATE CreditCard SET status = :p_status WHERE pno = :p_pno',
+            { p_status: cleanStatus, p_pno: pno }
+        );
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Credit card ending in ${pno.slice(-4)} status updated to ${cleanStatus}`,
+            data: { pno, status: cleanStatus }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in PATCH /api/creditcards/:pno/status:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.get('/api/creditcards/:pno/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const pno = req.params.pno;
+        if (!pno || !pno.trim()) {
+            return res.status(400).json({ success: false, error: 'A valid Card Number is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchCreditCardPreview(connection, pno);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: 'Credit card not found' });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/creditcards/:pno/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/creditcards/:pno', async (req, res) => {
+    let connection;
+    try {
+        const pno = req.params.pno;
+        if (!pno || !pno.trim()) {
+            return res.status(400).json({ success: false, error: 'A valid Card Number is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchCreditCardPreview(connection, pno);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: 'Credit card not found' });
+        }
+
+        // Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The credit card state has changed since preview was generated. Please refresh the preview before confirming.'
+            });
+        }
+
+        await connection.execute('DELETE FROM CreditCard WHERE pno = :p_pno', { p_pno: pno });
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Credit card ending in ${pno.slice(-4)} deleted successfully. Customer and account records preserved.`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/creditcards/:pno:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- EMPLOYEE DEACTIVATE / ACTIVATE & SAFE DELETE ---
+app.patch('/api/employees/:emp_id/status', async (req, res) => {
+    let connection;
+    try {
+        const emp_id = Number(req.params.emp_id);
+        const { status } = req.body;
+        if (!emp_id || isNaN(emp_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Employee ID is required' });
+        }
+
+        const cleanStatus = (status || '').trim().toUpperCase();
+        if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+            return res.status(400).json({ success: false, error: 'Status must be either ACTIVE or INACTIVE' });
+        }
+
+        connection = await getConnection();
+        const check = await connection.execute('SELECT emp_id, status FROM Employee WHERE emp_id = :p_empid', { p_empid: emp_id });
+        if (!check.rows || check.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
+        }
+
+        await connection.execute(
+            'UPDATE Employee SET status = :p_status WHERE emp_id = :p_empid',
+            { p_status: cleanStatus, p_empid: emp_id }
+        );
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Employee #${emp_id} status updated to ${cleanStatus}`,
+            data: { emp_id, status: cleanStatus }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in PATCH /api/employees/:emp_id/status:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.get('/api/employees/:emp_id/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const emp_id = Number(req.params.emp_id);
+        if (!emp_id || isNaN(emp_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Employee ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchEmployeePreview(connection, emp_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/employees/:emp_id/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/employees/:emp_id', async (req, res) => {
+    let connection;
+    try {
+        const emp_id = Number(req.params.emp_id);
+        if (!emp_id || isNaN(emp_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Employee ID is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchEmployeePreview(connection, emp_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
+        }
+
+        // Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The employee dependency state has changed since preview was generated. Please refresh the preview before confirming.'
+            });
+        }
+
+        // 1. Unlink assigned customers safely so their customer profile and accounts are preserved
+        await connection.execute(
+            'UPDATE Customer SET emp_id = NULL WHERE emp_id = :p_empid',
+            { p_empid: emp_id }
+        );
+
+        // 2. Delete employee branch responsibility entries
+        await connection.execute(
+            'DELETE FROM Responsible_For WHERE emp_id = :p_empid',
+            { p_empid: emp_id }
+        );
+
+        // 3. Delete employee root record
+        await connection.execute('DELETE FROM Employee WHERE emp_id = :p_empid', { p_empid: emp_id });
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Employee #${emp_id} deleted successfully. ${preview.customer_unlink_count || 0} customer(s) unlinked and preserved. Branch preserved.`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/employees/:emp_id:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- BRANCH DEACTIVATE / ACTIVATE & SAFE DELETE ---
+app.patch('/api/branches/:b_id/status', async (req, res) => {
+    let connection;
+    try {
+        const b_id = Number(req.params.b_id);
+        const { status } = req.body;
+        if (!b_id || isNaN(b_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Branch ID is required' });
+        }
+
+        const cleanStatus = (status || '').trim().toUpperCase();
+        if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+            return res.status(400).json({ success: false, error: 'Status must be either ACTIVE or INACTIVE' });
+        }
+
+        connection = await getConnection();
+        const check = await connection.execute('SELECT b_id, status FROM Branch WHERE b_id = :p_bid', { p_bid: b_id });
+        if (!check.rows || check.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
+        }
+
+        if (cleanStatus === 'INACTIVE') {
+            const activeEmpCheck = await connection.execute(
+                "SELECT COUNT(*) FROM Employee WHERE b_id = :p_bid AND (status = 'ACTIVE' OR status IS NULL)",
+                { p_bid: b_id }
+            );
+            const activeEmpCount = activeEmpCheck.rows[0][0];
+            if (activeEmpCount > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Cannot deactivate branch #${b_id} because it currently has ${activeEmpCount} active employee(s). Please reassign or deactivate employees first.`
+                });
+            }
+        }
+
+        await connection.execute(
+            'UPDATE Branch SET status = :p_status WHERE b_id = :p_bid',
+            { p_status: cleanStatus, p_bid: b_id }
+        );
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Branch #${b_id} status updated to ${cleanStatus}`,
+            data: { b_id, status: cleanStatus }
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in PATCH /api/branches/:b_id/status:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.get('/api/branches/:b_id/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const b_id = Number(req.params.b_id);
+        if (!b_id || isNaN(b_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Branch ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchBranchPreview(connection, b_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/branches/:b_id/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/branches/:b_id', async (req, res) => {
+    let connection;
+    try {
+        const b_id = Number(req.params.b_id);
+        if (!b_id || isNaN(b_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Branch ID is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchBranchPreview(connection, b_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
+        }
+
+        // Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The branch dependency state has changed since preview was generated. Please refresh the preview before confirming.'
+            });
+        }
+
+        if (preview.counts.Employee > 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Cannot delete branch #${b_id} because it currently has ${preview.counts.Employee} employee(s) assigned. Under corporate hierarchy rules, employees must be reassigned or deleted first, or you may deactivate the branch instead.`,
+                recommended_alternative: preview.recommended_alternative,
+                preview
+            });
+        }
+
+        // Delete branch responsibility entries
+        await connection.execute('DELETE FROM Responsible_For WHERE b_id = :p_bid', { p_bid: b_id });
+        await connection.execute('DELETE FROM Branch WHERE b_id = :p_bid', { p_bid: b_id });
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Branch #${b_id} and associated responsibility records deleted successfully`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/branches/:b_id:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- NOMINEE REMOVAL & PREVIEW ---
+app.get('/api/nominees/:n_id/delete-preview', async (req, res) => {
+    let connection;
+    try {
+        const n_id = Number(req.params.n_id);
+        if (!n_id || isNaN(n_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Nominee ID is required' });
+        }
+        connection = await getConnection();
+        const preview = await fetchNomineePreview(connection, n_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Nominee #${n_id} not found` });
+        }
+        res.json({ success: true, ...preview });
+    } catch (error) {
+        console.error('Error in GET /api/nominees/:n_id/delete-preview:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.delete('/api/nominees/:n_id', async (req, res) => {
+    let connection;
+    try {
+        const n_id = Number(req.params.n_id);
+        if (!n_id || isNaN(n_id)) {
+            return res.status(400).json({ success: false, error: 'A valid Nominee ID is required' });
+        }
+
+        connection = await getConnection();
+        const preview = await fetchNomineePreview(connection, n_id);
+        if (!preview) {
+            return res.status(404).json({ success: false, error: `Nominee #${n_id} not found` });
+        }
+
+        // Stale-preview / signature check
+        const clientSig = req.body?.preview_signature || req.query?.preview_signature;
+        if (clientSig && clientSig !== preview.preview_signature) {
+            return res.status(409).json({
+                success: false,
+                stale_preview: true,
+                error: 'The nominee state has changed since preview was generated. Please refresh the preview before confirming.'
+            });
+        }
+
+        // Delete from Owns then Nominee inside transaction
+        await connection.execute('DELETE FROM Owns WHERE n_id = :p_nid', { p_nid: n_id });
+        await connection.execute('DELETE FROM Nominee WHERE n_id = :p_nid', { p_nid: n_id });
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Nominee #${n_id} (${preview.target.label}) removed successfully. Customer and account balance preserved.`,
+            deleted_counts: preview.counts
+        });
+    } catch (error) {
+        if (connection) { try { await connection.rollback(); } catch (_) {} }
+        console.error('Error in DELETE /api/nominees/:n_id:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
     }
 });
 

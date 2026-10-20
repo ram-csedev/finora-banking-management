@@ -25,3 +25,47 @@
 .dist-legend-pct{font-weight:700;font-family:'Space Grotesk',sans-serif;color:var(--purple);font-size:11px}
 .dist-legend-val{color:var(--muted);font-size:10px}
 @media(max-width:580px){.dist-row{flex-direction:column;gap:20px}}
+
+/* Action buttons and status badges for Safe Delete, Close & Deactivate */
+.badge.purple,.badge.settled{background:#f3f0ff;color:#6d5dfc}
+.badge.blocked{background:#fff0f0;color:#c53c3c}
+.badge.closed{background:#f0f2f6;color:#697386}
+.badge.reversed{background:#fff7e8;color:#b6730d}
+.badge.inactive{background:#fbf2ea;color:#b45309}
+
+.btn-action{padding:5px 10px;font:600 11px 'DM Sans',sans-serif;border-radius:7px;border:1px solid transparent;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.btn-action:disabled{opacity:0.5;cursor:not-allowed}
+.btn-action-soft{background:#eeecff;color:#594be5;border-color:#dfdbfc}
+.btn-action-soft:hover:not(:disabled){background:#e2dfff}
+.btn-action-danger{background:#fff0f0;color:#c53c3c;border-color:#ffd6d6}
+.btn-action-danger:hover:not(:disabled){background:#ffe2e2}
+.btn-action-warning{background:#fff7e8;color:#b6730d;border-color:#ffebc2}
+.btn-action-warning:hover:not(:disabled){background:#ffeed0}
+.btn-action-success{background:#e9faf4;color:#07815d;border-color:#c0f2df}
+.btn-action-success:hover:not(:disabled){background:#d4f7eb}
+.btn-action-purple{background:#f3f0ff;color:#6d5dfc;border-color:#dfd7fd}
+.btn-action-purple:hover:not(:disabled){background:#e6e0fe}
+.btn-action-outline-danger{background:transparent;color:#c53c3c;border:1px solid #ffd6d6}
+.btn-action-outline-danger:hover:not(:disabled){background:#fff0f0;border-color:#c53c3c}
+
+.actions-cell{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
+.card-actions-row{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap}
+
+.list-manager-box{background:#f8f9fc;border:1px solid #edf0f5;border-radius:10px;padding:12px;margin-bottom:12px}
+.phone-item,.nominee-item{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff;border:1px solid #e7eaf0;border-radius:8px;margin-bottom:8px;font-size:12px}
+.phone-item:last-child,.nominee-item:last-child{margin-bottom:0}
+.policy-banner{padding:12px 14px;border-radius:10px;background:#f6f8fb;border-left:4px solid var(--purple);font-size:12px;color:#475569;margin-bottom:14px;line-height:1.5}
+
+/* Confirmation-Based Permanent Cascade Delete Modal */
+.cascade-impact-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.cascade-impact-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-bottom:10px}
+.cascade-count-list{display:flex;flex-direction:column;gap:6px}
+.cascade-count-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:6px 10px;background:#fff;border:1px solid #f1f5f9;border-radius:8px}
+.cascade-count-pill{font-weight:700;font-family:'Space Grotesk',sans-serif;background:#eff6ff;color:#2563eb;padding:2px 8px;border-radius:999px;font-size:11px}
+.cascade-count-pill.pill-danger{background:#fef2f2;color:#dc2626}
+.cascade-audit-alert{background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 14px;border-radius:8px;font-size:12px;color:#92400e;margin-bottom:14px;line-height:1.5}
+.cascade-danger-warning{background:#fef2f2;border-left:4px solid #ef4444;padding:11px 14px;border-radius:8px;font-size:12px;color:#991b1b;margin-bottom:14px;line-height:1.4;font-weight:600}
+.cascade-preserved-box{background:#f0fdf4;border:1px solid #bbf7d0;padding:10px 14px;border-radius:8px;font-size:11px;color:#166534;margin-top:10px;line-height:1.4}
+.cascade-override-label{display:flex;align-items:center;gap:8px;font-size:11px;color:#475569;cursor:pointer;margin:10px 0;padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px dashed #cbd5e1}
+.cascade-override-label input{cursor:pointer}
+.cascade-modal-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:18px;flex-wrap:wrap}
