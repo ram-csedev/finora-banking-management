@@ -1414,11 +1414,15 @@ function formatOracleError(error) {
     if (msg.includes('ORA-02290')) {
         return 'Check constraint error: The provided data violates business constraints (e.g. negative amount/balance or invalid status).';
     }
+    if (msg.includes('ORA-00904')) {
+        return 'Database schema error: One or more requested columns do not exist in the database table.';
+    }
     if (msg.includes('ORA-20')) {
         const match = msg.match(/ORA-20\d{3}:\s*([^\n\r]+)/);
         if (match && match[1]) return match[1].trim();
     }
-    return msg;
+    const cleaned = msg.replace(/https?:\/\/docs\.oracle\.com\/[^\s]+/gi, '').replace(/Help:\s*$/i, '').trim();
+    return cleaned || 'An unexpected database error occurred.';
 }
 
 // --- 1. CUSTOMERS ---
@@ -1433,26 +1437,30 @@ app.get('/api/customers/:cid', async (req, res) => {
         const hasStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
         const query = hasStatus
             ? "SELECT cid, pan, first_name, last_name, city, state, pincode, TO_CHAR(dob, 'YYYY-MM-DD') AS dob, emp_id, status FROM Customer WHERE cid = :cid"
-            : "SELECT cid, pan, first_name, last_name, city, state, pincode, TO_CHAR(dob, 'YYYY-MM-DD') AS dob, emp_id, 'ACTIVE' AS status FROM Customer WHERE cid = :cid";
+            : "SELECT cid, pan, first_name, last_name, city, state, pincode, TO_CHAR(dob, 'YYYY-MM-DD') AS dob, emp_id FROM Customer WHERE cid = :cid";
         const result = await connection.execute(query, { cid });
         if (!result.rows || result.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
         }
         const r = result.rows[0];
+        const custData = {
+            cid: r[0],
+            pan: r[1],
+            first_name: r[2],
+            last_name: r[3],
+            city: r[4],
+            state: r[5],
+            pincode: r[6],
+            dob: r[7],
+            emp_id: r[8],
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            custData.status = r[9];
+        }
         res.json({
             success: true,
-            data: {
-                cid: r[0],
-                pan: r[1],
-                first_name: r[2],
-                last_name: r[3],
-                city: r[4],
-                state: r[5],
-                pincode: r[6],
-                dob: r[7],
-                emp_id: r[8],
-                status: r[9]
-            }
+            data: custData
         });
     } catch (error) {
         console.error('Error in GET /api/customers/:cid:', error.message);
@@ -1494,11 +1502,10 @@ app.put('/api/customers/:cid', async (req, res) => {
 
         connection = await getConnection();
 
-        const custCheck = await connection.execute('SELECT cid, status FROM Customer WHERE cid = :cid', { cid });
+        const custCheck = await connection.execute('SELECT cid FROM Customer WHERE cid = :cid', { cid });
         if (!custCheck.rows || custCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
         }
-        const currentCust = custCheck.rows[0];
 
         if (cleanPan) {
             const panCheck = await connection.execute(
@@ -1522,15 +1529,21 @@ app.put('/api/customers/:cid', async (req, res) => {
             }
         }
 
-        let cleanStatus = currentCust[1] || 'ACTIVE';
-        if (status !== undefined && status !== null && String(status).trim() !== '') {
-            cleanStatus = String(status).trim().toUpperCase();
-            if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
-                return res.status(400).json({ success: false, error: 'Customer status must be ACTIVE or INACTIVE' });
+        const hasStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
+        let cleanStatus = 'ACTIVE';
+        if (hasStatus) {
+            const stRes = await connection.execute('SELECT status FROM Customer WHERE cid = :cid', { cid });
+            if (stRes.rows && stRes.rows.length > 0 && stRes.rows[0][0]) {
+                cleanStatus = stRes.rows[0][0];
+            }
+            if (status !== undefined && status !== null && String(status).trim() !== '') {
+                cleanStatus = String(status).trim().toUpperCase();
+                if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+                    return res.status(400).json({ success: false, error: 'Customer status must be ACTIVE or INACTIVE' });
+                }
             }
         }
 
-        const hasStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
         let updateSql;
         let binds = {
             cid,
@@ -1571,21 +1584,27 @@ app.put('/api/customers/:cid', async (req, res) => {
         }
 
         await connection.execute(updateSql, binds, { autoCommit: true });
+
+        const returnData = {
+            cid,
+            first_name: cleanFirst,
+            last_name: cleanLast,
+            pan: cleanPan,
+            dob: cleanDob,
+            city: cleanCity,
+            state: cleanState,
+            pincode: cleanPin,
+            emp_id: cleanEmpId,
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            returnData.status = cleanStatus;
+        }
+
         res.json({
             success: true,
             message: `Customer #${cid} updated successfully`,
-            data: {
-                cid,
-                first_name: cleanFirst,
-                last_name: cleanLast,
-                pan: cleanPan,
-                dob: cleanDob,
-                city: cleanCity,
-                state: cleanState,
-                pincode: cleanPin,
-                emp_id: cleanEmpId,
-                status: cleanStatus
-            }
+            data: returnData
         });
     } catch (error) {
         if (connection) {
@@ -1867,25 +1886,30 @@ app.get('/api/loans/:l_id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'A valid numeric Loan ID is required' });
         }
         connection = await getConnection();
-        const result = await connection.execute(
-            'SELECT l_id, cid, l_type, amount, interest, term, status FROM Loan WHERE l_id = :l_id',
-            { l_id }
-        );
+        const hasStatus = await tableHasColumn(connection, 'LOAN', 'STATUS');
+        const query = hasStatus
+            ? 'SELECT l_id, cid, l_type, amount, interest, term, status FROM Loan WHERE l_id = :l_id'
+            : 'SELECT l_id, cid, l_type, amount, interest, term FROM Loan WHERE l_id = :l_id';
+        const result = await connection.execute(query, { l_id });
         if (!result.rows || result.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
         }
         const r = result.rows[0];
+        const loanData = {
+            l_id: r[0],
+            cid: r[1],
+            l_type: r[2],
+            amount: Number(r[3]) || 0,
+            interest: Number(r[4]) || 0,
+            term: Number(r[5]) || 0,
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            loanData.status = r[6];
+        }
         res.json({
             success: true,
-            data: {
-                l_id: r[0],
-                cid: r[1],
-                l_type: r[2],
-                amount: Number(r[3]) || 0,
-                interest: Number(r[4]) || 0,
-                term: Number(r[5]) || 0,
-                status: r[6]
-            }
+            data: loanData
         });
     } catch (error) {
         console.error('Error in GET /api/loans/:l_id:', error.message);
@@ -1907,16 +1931,17 @@ app.put('/api/loans/:l_id', async (req, res) => {
         const { cid, l_type, amount, interest, term, status } = req.body;
 
         connection = await getConnection();
+        const hasStatus = await tableHasColumn(connection, 'LOAN', 'STATUS');
 
-        const loanCheck = await connection.execute(
-            'SELECT l_id, cid, l_type, amount, interest, term, status FROM Loan WHERE l_id = :l_id',
-            { l_id }
-        );
+        const checkQuery = hasStatus
+            ? 'SELECT l_id, cid, l_type, amount, interest, term, status FROM Loan WHERE l_id = :l_id'
+            : 'SELECT l_id, cid, l_type, amount, interest, term FROM Loan WHERE l_id = :l_id';
+        const loanCheck = await connection.execute(checkQuery, { l_id });
         if (!loanCheck.rows || loanCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
         }
         const curLoan = loanCheck.rows[0];
-        const curStatus = curLoan[6] || 'ACTIVE';
+        const curStatus = hasStatus ? (curLoan[6] || 'ACTIVE') : 'ACTIVE';
         const curAmount = Number(curLoan[3]);
 
         let cleanCid = curLoan[1];
@@ -1963,46 +1988,72 @@ app.put('/api/loans/:l_id', async (req, res) => {
         }
 
         let cleanStatus = curStatus;
-        if (status !== undefined && status !== null && String(status).trim() !== '') {
+        if (hasStatus && status !== undefined && status !== null && String(status).trim() !== '') {
             cleanStatus = String(status).trim().toUpperCase();
             if (!['ACTIVE', 'SETTLED', 'CLOSED'].includes(cleanStatus)) {
                 return res.status(400).json({ success: false, error: 'Loan status must be ACTIVE, SETTLED, or CLOSED' });
             }
         }
 
-        await connection.execute(
-            `UPDATE Loan SET
-                cid = :cid,
-                l_type = :l_type,
-                amount = :amount,
-                interest = :interest,
-                term = :term,
-                status = :status
-            WHERE l_id = :l_id`,
-            {
-                cid: cleanCid,
-                l_type: cleanType,
-                amount: cleanAmount,
-                interest: cleanInterest,
-                term: cleanTerm,
-                status: cleanStatus,
-                l_id
-            },
-            { autoCommit: true }
-        );
+        if (hasStatus) {
+            await connection.execute(
+                `UPDATE Loan SET
+                    cid = :cid,
+                    l_type = :l_type,
+                    amount = :amount,
+                    interest = :interest,
+                    term = :term,
+                    status = :status
+                WHERE l_id = :l_id`,
+                {
+                    cid: cleanCid,
+                    l_type: cleanType,
+                    amount: cleanAmount,
+                    interest: cleanInterest,
+                    term: cleanTerm,
+                    status: cleanStatus,
+                    l_id
+                },
+                { autoCommit: true }
+            );
+        } else {
+            await connection.execute(
+                `UPDATE Loan SET
+                    cid = :cid,
+                    l_type = :l_type,
+                    amount = :amount,
+                    interest = :interest,
+                    term = :term
+                WHERE l_id = :l_id`,
+                {
+                    cid: cleanCid,
+                    l_type: cleanType,
+                    amount: cleanAmount,
+                    interest: cleanInterest,
+                    term: cleanTerm,
+                    l_id
+                },
+                { autoCommit: true }
+            );
+        }
+
+        const returnData = {
+            l_id,
+            cid: cleanCid,
+            l_type: cleanType,
+            amount: cleanAmount,
+            interest: cleanInterest,
+            term: cleanTerm,
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            returnData.status = cleanStatus;
+        }
 
         res.json({
             success: true,
             message: `Loan #${l_id} updated successfully`,
-            data: {
-                l_id,
-                cid: cleanCid,
-                l_type: cleanType,
-                amount: cleanAmount,
-                interest: cleanInterest,
-                term: cleanTerm,
-                status: cleanStatus
-            }
+            data: returnData
         });
     } catch (error) {
         if (connection) {
@@ -2169,26 +2220,31 @@ app.get('/api/branches/:b_id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'A valid numeric Branch ID is required' });
         }
         connection = await getConnection();
-        const result = await connection.execute(
-            'SELECT b_id, branch_name, city, state, pincode, ifsc, contact, status FROM Branch WHERE b_id = :b_id',
-            { b_id }
-        );
+        const hasStatus = await tableHasColumn(connection, 'BRANCH', 'STATUS');
+        const query = hasStatus
+            ? 'SELECT b_id, branch_name, city, state, pincode, ifsc, contact, status FROM Branch WHERE b_id = :b_id'
+            : 'SELECT b_id, branch_name, city, state, pincode, ifsc, contact FROM Branch WHERE b_id = :b_id';
+        const result = await connection.execute(query, { b_id });
         if (!result.rows || result.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
         }
         const r = result.rows[0];
+        const branchData = {
+            b_id: r[0],
+            branch_name: r[1],
+            city: r[2],
+            state: r[3],
+            pincode: r[4],
+            ifsc: r[5],
+            contact: r[6],
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            branchData.status = r[7];
+        }
         res.json({
             success: true,
-            data: {
-                b_id: r[0],
-                branch_name: r[1],
-                city: r[2],
-                state: r[3],
-                pincode: r[4],
-                ifsc: r[5],
-                contact: r[6],
-                status: r[7]
-            }
+            data: branchData
         });
     } catch (error) {
         console.error('Error in GET /api/branches/:b_id:', error.message);
@@ -2220,11 +2276,12 @@ app.put('/api/branches/:b_id', async (req, res) => {
         const cleanPin = pincode && pincode.trim() ? pincode.trim() : null;
 
         connection = await getConnection();
+        const hasStatus = await tableHasColumn(connection, 'BRANCH', 'STATUS');
 
-        const branchCheck = await connection.execute(
-            'SELECT b_id, status FROM Branch WHERE b_id = :b_id',
-            { b_id }
-        );
+        const checkQuery = hasStatus
+            ? 'SELECT b_id, status FROM Branch WHERE b_id = :b_id'
+            : 'SELECT b_id FROM Branch WHERE b_id = :b_id';
+        const branchCheck = await connection.execute(checkQuery, { b_id });
         if (!branchCheck.rows || branchCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
         }
@@ -2239,50 +2296,78 @@ app.put('/api/branches/:b_id', async (req, res) => {
             }
         }
 
-        let cleanStatus = branchCheck.rows[0][1] || 'ACTIVE';
-        if (status !== undefined && status !== null && String(status).trim() !== '') {
+        let cleanStatus = hasStatus ? (branchCheck.rows[0][1] || 'ACTIVE') : 'ACTIVE';
+        if (hasStatus && status !== undefined && status !== null && String(status).trim() !== '') {
             cleanStatus = String(status).trim().toUpperCase();
             if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
                 return res.status(400).json({ success: false, error: 'Branch status must be ACTIVE or INACTIVE' });
             }
         }
 
-        await connection.execute(
-            `UPDATE Branch SET
-                branch_name = :branch_name,
-                ifsc = :ifsc,
-                contact = :contact,
-                city = :city,
-                state = :br_state,
-                pincode = :pincode,
-                status = :status
-            WHERE b_id = :b_id`,
-            {
-                branch_name: cleanName,
-                ifsc: cleanIfsc,
-                contact: cleanContact,
-                city: cleanCity,
-                br_state: cleanState,
-                pincode: cleanPin,
-                status: cleanStatus,
-                b_id
-            },
-            { autoCommit: true }
-        );
+        if (hasStatus) {
+            await connection.execute(
+                `UPDATE Branch SET
+                    branch_name = :branch_name,
+                    ifsc = :ifsc,
+                    contact = :contact,
+                    city = :city,
+                    state = :br_state,
+                    pincode = :pincode,
+                    status = :status
+                WHERE b_id = :b_id`,
+                {
+                    branch_name: cleanName,
+                    ifsc: cleanIfsc,
+                    contact: cleanContact,
+                    city: cleanCity,
+                    br_state: cleanState,
+                    pincode: cleanPin,
+                    status: cleanStatus,
+                    b_id
+                },
+                { autoCommit: true }
+            );
+        } else {
+            await connection.execute(
+                `UPDATE Branch SET
+                    branch_name = :branch_name,
+                    ifsc = :ifsc,
+                    contact = :contact,
+                    city = :city,
+                    state = :br_state,
+                    pincode = :pincode
+                WHERE b_id = :b_id`,
+                {
+                    branch_name: cleanName,
+                    ifsc: cleanIfsc,
+                    contact: cleanContact,
+                    city: cleanCity,
+                    br_state: cleanState,
+                    pincode: cleanPin,
+                    b_id
+                },
+                { autoCommit: true }
+            );
+        }
+
+        const returnData = {
+            b_id,
+            branch_name: cleanName,
+            ifsc: cleanIfsc,
+            contact: cleanContact,
+            city: cleanCity,
+            state: cleanState,
+            pincode: cleanPin,
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            returnData.status = cleanStatus;
+        }
 
         res.json({
             success: true,
             message: `Branch #${b_id} (${cleanName}) updated successfully`,
-            data: {
-                b_id,
-                branch_name: cleanName,
-                ifsc: cleanIfsc,
-                contact: cleanContact,
-                city: cleanCity,
-                state: cleanState,
-                pincode: cleanPin,
-                status: cleanStatus
-            }
+            data: returnData
         });
     } catch (error) {
         if (connection) {
@@ -2306,25 +2391,30 @@ app.get('/api/employees/:emp_id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'A valid numeric Employee ID is required' });
         }
         connection = await getConnection();
-        const result = await connection.execute(
-            'SELECT emp_id, first_name, last_name, salary, TO_CHAR(hire_date, \'YYYY-MM-DD\') AS hire_date, b_id, status FROM Employee WHERE emp_id = :emp_id',
-            { emp_id }
-        );
+        const hasStatus = await tableHasColumn(connection, 'EMPLOYEE', 'STATUS');
+        const query = hasStatus
+            ? "SELECT emp_id, first_name, last_name, salary, TO_CHAR(hire_date, 'YYYY-MM-DD') AS hire_date, b_id, status FROM Employee WHERE emp_id = :emp_id"
+            : "SELECT emp_id, first_name, last_name, salary, TO_CHAR(hire_date, 'YYYY-MM-DD') AS hire_date, b_id FROM Employee WHERE emp_id = :emp_id";
+        const result = await connection.execute(query, { emp_id });
         if (!result.rows || result.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
         }
         const r = result.rows[0];
+        const empData = {
+            emp_id: r[0],
+            first_name: r[1],
+            last_name: r[2],
+            salary: Number(r[3]) || 0,
+            hire_date: r[4],
+            b_id: r[5],
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            empData.status = r[6];
+        }
         res.json({
             success: true,
-            data: {
-                emp_id: r[0],
-                first_name: r[1],
-                last_name: r[2],
-                salary: Number(r[3]) || 0,
-                hire_date: r[4],
-                b_id: r[5],
-                status: r[6]
-            }
+            data: empData
         });
     } catch (error) {
         console.error('Error in GET /api/employees/:emp_id:', error.message);
@@ -2352,17 +2442,18 @@ app.put('/api/employees/:emp_id', async (req, res) => {
         const cleanLast = last_name && last_name.trim() ? last_name.trim() : null;
 
         connection = await getConnection();
+        const hasStatus = await tableHasColumn(connection, 'EMPLOYEE', 'STATUS');
 
-        const empCheck = await connection.execute(
-            'SELECT emp_id, status, salary, TO_CHAR(hire_date, \'YYYY-MM-DD\'), b_id FROM Employee WHERE emp_id = :emp_id',
-            { emp_id }
-        );
+        const checkQuery = hasStatus
+            ? "SELECT emp_id, salary, TO_CHAR(hire_date, 'YYYY-MM-DD'), b_id, status FROM Employee WHERE emp_id = :emp_id"
+            : "SELECT emp_id, salary, TO_CHAR(hire_date, 'YYYY-MM-DD'), b_id FROM Employee WHERE emp_id = :emp_id";
+        const empCheck = await connection.execute(checkQuery, { emp_id });
         if (!empCheck.rows || empCheck.rows.length === 0) {
             return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
         }
         const curEmp = empCheck.rows[0];
 
-        let cleanSalary = Number(curEmp[2]);
+        let cleanSalary = Number(curEmp[1]);
         if (salary !== undefined && salary !== null && String(salary).trim() !== '') {
             cleanSalary = Number(salary);
             if (isNaN(cleanSalary) || cleanSalary < 0) {
@@ -2370,7 +2461,7 @@ app.put('/api/employees/:emp_id', async (req, res) => {
             }
         }
 
-        let cleanHireDate = curEmp[3];
+        let cleanHireDate = curEmp[2];
         if (hire_date && String(hire_date).trim()) {
             const hStr = String(hire_date).trim().slice(0, 10);
             if (!/^\d{4}-\d{2}-\d{2}$/.test(hStr) || isNaN(Date.parse(hStr))) {
@@ -2391,47 +2482,73 @@ app.put('/api/employees/:emp_id', async (req, res) => {
             }
         }
 
-        let cleanStatus = curEmp[1] || 'ACTIVE';
-        if (status !== undefined && status !== null && String(status).trim() !== '') {
+        let cleanStatus = hasStatus ? (curEmp[4] || 'ACTIVE') : 'ACTIVE';
+        if (hasStatus && status !== undefined && status !== null && String(status).trim() !== '') {
             cleanStatus = String(status).trim().toUpperCase();
             if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
                 return res.status(400).json({ success: false, error: 'Employee status must be ACTIVE or INACTIVE' });
             }
         }
 
-        await connection.execute(
-            `UPDATE Employee SET
-                first_name = :first_name,
-                last_name = :last_name,
-                salary = :salary,
-                hire_date = CASE WHEN :hire_date IS NOT NULL THEN TO_DATE(:hire_date, 'YYYY-MM-DD') ELSE hire_date END,
-                b_id = :b_id,
-                status = :status
-            WHERE emp_id = :emp_id`,
-            {
-                first_name: cleanFirst,
-                last_name: cleanLast,
-                salary: cleanSalary,
-                hire_date: cleanHireDate,
-                b_id: cleanBid,
-                status: cleanStatus,
-                emp_id
-            },
-            { autoCommit: true }
-        );
+        if (hasStatus) {
+            await connection.execute(
+                `UPDATE Employee SET
+                    first_name = :first_name,
+                    last_name = :last_name,
+                    salary = :salary,
+                    hire_date = CASE WHEN :hire_date IS NOT NULL THEN TO_DATE(:hire_date, 'YYYY-MM-DD') ELSE hire_date END,
+                    b_id = :b_id,
+                    status = :status
+                WHERE emp_id = :emp_id`,
+                {
+                    first_name: cleanFirst,
+                    last_name: cleanLast,
+                    salary: cleanSalary,
+                    hire_date: cleanHireDate,
+                    b_id: cleanBid,
+                    status: cleanStatus,
+                    emp_id
+                },
+                { autoCommit: true }
+            );
+        } else {
+            await connection.execute(
+                `UPDATE Employee SET
+                    first_name = :first_name,
+                    last_name = :last_name,
+                    salary = :salary,
+                    hire_date = CASE WHEN :hire_date IS NOT NULL THEN TO_DATE(:hire_date, 'YYYY-MM-DD') ELSE hire_date END,
+                    b_id = :b_id
+                WHERE emp_id = :emp_id`,
+                {
+                    first_name: cleanFirst,
+                    last_name: cleanLast,
+                    salary: cleanSalary,
+                    hire_date: cleanHireDate,
+                    b_id: cleanBid,
+                    emp_id
+                },
+                { autoCommit: true }
+            );
+        }
+
+        const returnData = {
+            emp_id,
+            first_name: cleanFirst,
+            last_name: cleanLast,
+            salary: cleanSalary,
+            hire_date: cleanHireDate,
+            b_id: cleanBid,
+            has_status: hasStatus
+        };
+        if (hasStatus) {
+            returnData.status = cleanStatus;
+        }
 
         res.json({
             success: true,
             message: `Employee #${emp_id} (${cleanFirst}) updated successfully`,
-            data: {
-                emp_id,
-                first_name: cleanFirst,
-                last_name: cleanLast,
-                salary: cleanSalary,
-                hire_date: cleanHireDate,
-                b_id: cleanBid,
-                status: cleanStatus
-            }
+            data: returnData
         });
     } catch (error) {
         if (connection) {

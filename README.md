@@ -347,13 +347,13 @@ Finora implements full record editing capabilities across all banking entities w
 
 | Entity | Editable Fields | Intentionally Protected / Immutable Fields | Integrity & Propagation Rules |
 | :--- | :--- | :--- | :--- |
-| **Customers** | First Name, Last Name, PAN, DOB, City, State, Pincode, Assigned Employee, Status | Customer ID (`cid`) | Validates assigned Employee ID exists; ensures unique PAN; preserves associated accounts and loans. |
+| **Customers** | First Name, Last Name, PAN, DOB, City, State, Pincode, Assigned Employee, Status (if present in schema) | Customer ID (`cid`) | Validates assigned Employee ID exists; ensures unique PAN; preserves associated accounts and loans. |
 | **Accounts** | Account Type (`SAVINGS`/`CURRENT`), Status (`ACTIVE`/`INACTIVE`/`CLOSED`), Customer Assignment (`cid`) | Account ID (`acc_id`), Ledger Balance (`balance`) | Direct balance modification rejected (400); closing requires zero balance; changing customer updates `Owns` atomically. |
 | **Transactions** | Safe Metadata (`mode`: `ONLINE`, `CASH`, `ATM`, `POS`, `CHEQUE`, `UPI`) | Transaction ID (`t_id`), Account (`acc_id`), Type, Amount, Status | Amount, Account, and Type cannot be edited directly to protect accounting balance; corrections must use Delete/Reversal. |
-| **Loans** | Loan Type, Principal Amount (active loans), Annual Interest Rate, Tenure (months), Status | Loan ID (`l_id`) | Principal amount edits permitted only on active loans with validation (`> 0`); settled/closed loans cannot modify principal. |
+| **Loans** | Loan Type, Principal Amount (active loans), Annual Interest Rate, Tenure (months), Status (if present in schema) | Loan ID (`l_id`) | Principal amount edits permitted only on active loans with validation (`> 0`); settled/closed loans cannot modify principal. |
 | **Credit Cards** | Card Type / Network, Card Limit, Expiry Date, Status | Card Number (`pno`), CVV | CVV and full card numbers protected from exposure; card limit must be positive (`> 0`); validates customer existence. |
-| **Branches** | Branch Name, IFSC Code, Contact, City, State, Pincode, Status | Branch ID (`b_id`) | IFSC code uniqueness enforced against other branches; updating branch preserves employee assignments. |
-| **Employees** | First Name, Last Name, Salary, Hire Date, Branch Assignment (`b_id`), Status | Employee ID (`emp_id`) | Validates assigned Branch ID exists; preserves customer and responsibility assignments unless explicitly changed. |
+| **Branches** | Branch Name, IFSC Code, Contact, City, State, Pincode, Status (if present in schema) | Branch ID (`b_id`) | IFSC code uniqueness enforced against other branches; updating branch preserves employee assignments. |
+| **Employees** | First Name, Last Name, Salary, Hire Date, Branch Assignment (`b_id`), Status (if present in schema) | Employee ID (`emp_id`) | Validates assigned Branch ID exists; preserves customer and responsibility assignments unless explicitly changed. |
 | **Nominees** | First Name, Last Name, Relationship, DOB, Customer (`cid`), Account (`acc_id`) | Nominee ID (`n_id`) | Customer and Account foreign keys validated; atomically updates `Owns` relationship when associations change. |
 | **Customer Phones** | Phone Number | Customer ID (`cid`) | Validates phone length (5–15 digits) and rejects duplicates for the same customer. |
 | **Owns** | Customer (`cid`), Account (`acc_id`), Nominee (`n_id`) | — | All three foreign keys validated against parent tables before atomic tuple update. |
@@ -377,7 +377,6 @@ Finora implements full record editing capabilities across all banking entities w
 
 ---
 
->>>>>>> b514995 (Add full record editing with referential integrity)
 ## Sample Workflow
 
 ```text
