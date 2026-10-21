@@ -208,6 +208,7 @@ function accountsTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
+            <button class="btn-action btn-action-edit" onclick="openEditAccount(${accId})" title="Edit Account">Edit</button>
             <button class="btn-action btn-action-soft" onclick="openNomineeManager(${accId})" title="View / Unlink Nominees">Nominees</button>
             ${!isClosed 
               ? `<button class="btn-action btn-action-warning" onclick="promptCloseAccount(${accId}, ${bal})" title="Close Account">Close</button>`
@@ -243,6 +244,7 @@ function transactionsTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
+            <button class="btn-action btn-action-edit" onclick="openEditTransaction(${tId})" title="Edit Transaction Mode">Edit</button>
             <button class="btn-action btn-action-outline-danger" onclick="promptDeleteTx(${tId}, ${accId}, '${txType}', ${amt}, '${status}')" title="Delete Transaction & Reverse Financial Effect">Delete</button>
           </div>
         </td>
@@ -273,6 +275,7 @@ function loansTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
+            <button class="btn-action btn-action-edit" onclick="openEditLoan(${lId})" title="Edit Loan Details">Edit</button>
             ${!isSettled
               ? `<button class="btn-action btn-action-purple" onclick="promptSettleLoan(${lId}, ${amt})" title="Mark Loan as Settled">Settle</button>`
               : `<span class="badge settled" style="font-size:10px">Settled</span>`
@@ -305,6 +308,7 @@ function customersTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
+            <button class="btn-action btn-action-edit" onclick="openEditCustomer(${cid})" title="Edit Customer Details">Edit</button>
             <button class="btn-action btn-action-soft" onclick="openPhoneManager(${cid}, '${escapeQuotes(name)}')" title="Manage Phones">Phones</button>
             <button class="btn-action ${isInactive ? 'btn-action-success' : 'btn-action-warning'}" onclick="toggleCustomerStatus(${cid}, '${isInactive ? 'ACTIVE' : 'INACTIVE'}')">${isInactive ? 'Activate' : 'Deactivate'}</button>
             <button class="btn-action btn-action-outline-danger" onclick="promptDeleteCustomer(${cid}, '${escapeQuotes(name)}')" title="Safe Delete Customer">Delete</button>
@@ -343,6 +347,7 @@ function cardsTable(){
           ${statusBadge(status)}
         </div>
         <div class="card-actions-row">
+          <button class="btn-action btn-action-edit" onclick="openEditCreditCard('${pno}')" title="Edit Card Details">Edit</button>
           ${!isClosed ? `
             ${isBlocked 
               ? `<button class="btn-action btn-action-success" onclick="toggleCardStatus('${pno}', 'ACTIVE')">Unblock</button>` 
@@ -377,6 +382,7 @@ function branchesTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
+            <button class="btn-action btn-action-edit" onclick="openEditBranch(${bId})" title="Edit Branch Details">Edit</button>
             <button class="btn-action ${isInactive ? 'btn-action-success' : 'btn-action-warning'}" onclick="toggleBranchStatus(${bId}, '${isInactive ? 'ACTIVE' : 'INACTIVE'}')">${isInactive ? 'Activate' : 'Deactivate'}</button>
             <button class="btn-action btn-action-outline-danger" onclick="promptDeleteBranch(${bId}, '${escapeQuotes(name)}')" title="Safe Delete Branch">Delete</button>
           </div>
@@ -406,6 +412,7 @@ function employeesTable(){
         <td>${statusBadge(status)}</td>
         <td>
           <div class="actions-cell">
+            <button class="btn-action btn-action-edit" onclick="openEditEmployee(${empId})" title="Edit Employee Details">Edit</button>
             <button class="btn-action ${isInactive ? 'btn-action-success' : 'btn-action-warning'}" onclick="toggleEmployeeStatus(${empId}, '${isInactive ? 'ACTIVE' : 'INACTIVE'}')">${isInactive ? 'Activate' : 'Deactivate'}</button>
             <button class="btn-action btn-action-outline-danger" onclick="promptDeleteEmployee(${empId}, '${escapeQuotes(name)}')" title="Safe Delete Employee">Delete</button>
           </div>
@@ -813,7 +820,10 @@ async function openPhoneManager(cid, custName) {
         const ph = Array.isArray(p) ? p[1] : (p.phone || p);
         return `<div class="phone-item">
           <span>📞 <b>${ph}</b></span>
-          <button class="btn-action btn-action-danger" onclick="removeCustomerPhone(${cid}, '${ph}', '${escapeQuotes(custName)}')">Remove</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn-action btn-action-edit" onclick="openEditPhone(${cid}, '${ph}', '${escapeQuotes(custName)}')">Edit</button>
+            <button class="btn-action btn-action-danger" onclick="removeCustomerPhone(${cid}, '${ph}', '${escapeQuotes(custName)}')">Remove</button>
+          </div>
         </div>`;
       }).join('');
     } catch (err) {
@@ -909,7 +919,10 @@ async function openNomineeManager(accId) {
               Nominee #${nId} • Account #${nAcc} • CID #${nCid} • DOB: ${dobVal}
             </div>
           </div>
-          <button class="btn-action btn-action-danger" onclick="removeNomineeItem(${nId}, '${escapeQuotes(name)}', ${accId})">Remove</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="btn-action btn-action-edit" onclick="openEditNominee(${nId}, ${accId})">Edit</button>
+            <button class="btn-action btn-action-danger" onclick="removeNomineeItem(${nId}, '${escapeQuotes(name)}', ${accId})">Remove</button>
+          </div>
         </div>`;
       }).join('');
     } catch (err) {
@@ -1219,3 +1232,757 @@ $('#sidebar').addEventListener('click',e=>{const b=e.target.closest('[data-view]
 $('#refreshBtn').onclick=()=>loadAll().then(()=>renderView(true));
 $('#mobileMenu').onclick=()=>$('#sidebar').classList.toggle('open');
 loadAll().then(()=>renderView(true)).catch(()=>renderView(true));
+
+
+// ============================================================================
+// FULL RECORD EDITING MODALS & HANDLERS
+// ============================================================================
+
+function toDateInput(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return '';
+  const year = dt.getFullYear();
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function editModalDom() {
+  let m = $('#editModal');
+  if (!m) {
+    document.body.insertAdjacentHTML('beforeend', `
+      <div class="modal-backdrop" id="editModal">
+        <div class="modal" style="max-height:90vh;overflow-y:auto;max-width:560px">
+          <div class="modal-head">
+            <h3 id="editModalTitle">Edit Record</h3>
+            <button class="close" onclick="closeEditModal()">×</button>
+          </div>
+          <div id="editModalBanner"></div>
+          <div id="editModalBody"></div>
+          <div id="editModalError" style="margin-top:12px"></div>
+          <div class="modal-actions">
+            <button class="btn btn-soft" onclick="closeEditModal()">Cancel</button>
+            <button class="btn btn-primary" id="editModalSaveBtn">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    `);
+    m = $('#editModal');
+  }
+  return m;
+}
+
+function closeEditModal() {
+  $('#editModal')?.classList.remove('open');
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+}
+
+async function openEditCustomer(cid) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let cust = (state.data.customers || []).find(c => Number(c[0]) === Number(cid));
+  if (!cust) {
+    try {
+      const res = await api(`/customers/${cid}`);
+      const d = res.data;
+      cust = [d.cid, d.pan, d.first_name, d.last_name, d.city, d.state, d.pincode, d.dob, d.emp_id, d.status];
+    } catch (e) {
+      return toast('Customer not found: ' + e.message, false);
+    }
+  }
+
+  if (!state.data.employees) await load('/employees', 'employees');
+  const emps = state.data.employees || [];
+
+  $('#editModalTitle').textContent = 'Edit Customer';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing <b>Customer</b> Record <code>#${cust[0]}</code> • Referential integrity maintained across accounts and loans.
+    </div>
+  `;
+
+  const empOptions = '<option value="">None (Optional)</option>' + emps.map(e => 
+    `<option value="${e[0]}" ${Number(e[0]) === Number(cust[8]) ? 'selected' : ''}>${e[1]} ${e[2] || ''} (Emp #${e[0]})</option>`
+  ).join('');
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>First Name *</label><input id="ecFirst" value="${escapeQuotes(cust[2] || '')}" required /></div>
+      <div class="field"><label>Last Name</label><input id="ecLast" value="${escapeQuotes(cust[3] || '')}" /></div>
+      <div class="field"><label>PAN (Unique)</label><input id="ecPan" value="${escapeQuotes(cust[1] || '')}" style="text-transform:uppercase" /><small class="field-tip">Must be unique across all customers</small></div>
+      <div class="field"><label>Date of Birth</label><input id="ecDob" type="date" value="${toDateInput(cust[7])}" /></div>
+      <div class="field"><label>City</label><input id="ecCity" value="${escapeQuotes(cust[4] || '')}" /></div>
+      <div class="field"><label>State</label><input id="ecState" value="${escapeQuotes(cust[5] || '')}" /></div>
+      <div class="field"><label>Pincode</label><input id="ecPin" value="${escapeQuotes(cust[6] || '')}" /></div>
+      <div class="field"><label>Status</label><select id="ecStatus" class="select" style="width:100%"><option value="ACTIVE" ${cust[9] === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option><option value="INACTIVE" ${cust[9] === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option></select></div>
+      <div class="field full"><label>Assigned Employee (Relationship Manager)</label><select id="ecEmp" class="select" style="width:100%">${empOptions}</select></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const first_name = $('#ecFirst').value.trim();
+    const last_name = $('#ecLast').value.trim();
+    const pan = $('#ecPan').value.trim().toUpperCase();
+    const dob = $('#ecDob').value.trim();
+    const city = $('#ecCity').value.trim();
+    const stateVal = $('#ecState').value.trim();
+    const pincode = $('#ecPin').value.trim();
+    const status = $('#ecStatus').value;
+    const emp_id = $('#ecEmp').value ? Number($('#ecEmp').value) : null;
+
+    if (!first_name) {
+      $('#editModalError').innerHTML = '<div class="alert">First name is required.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/customers/${cid}`, {
+        method: 'PUT',
+        body: JSON.stringify({ first_name, last_name, pan: pan || null, dob: dob || null, city: city || null, state: stateVal || null, pincode: pincode || null, emp_id, status })
+      });
+      closeEditModal();
+      toast(`Customer #${cid} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditAccount(accId) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let acc = (state.data.accounts || []).find(a => Number(a[0]) === Number(accId));
+  if (!acc) {
+    try {
+      const res = await api(`/accounts/${accId}`);
+      const d = res.data;
+      acc = [d.acc_id, d.balance, d.status, d.acc_type, d.cid];
+    } catch (e) {
+      return toast('Account not found: ' + e.message, false);
+    }
+  }
+
+  if (!state.data.customers) await load('/customers', 'customers');
+  const custs = state.data.customers || [];
+  const bal = Number(acc[1]) || 0;
+
+  $('#editModalTitle').textContent = 'Edit Account';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing <b>Account</b> Record <code>#${acc[0]}</code> • Balance changes must go through regulated transaction workflows.
+    </div>
+  `;
+
+  const custOptions = custs.map(c => 
+    `<option value="${c[0]}" ${Number(c[0]) === Number(acc[4]) ? 'selected' : ''}>${c[2]} ${c[3] || ''} (CID #${c[0]})</option>`
+  ).join('');
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field full"><label>Account Owner (Customer)</label><select id="eaCid" class="select" style="width:100%">${custOptions}</select><small class="field-tip">Reassigning customer automatically syncs account ownership</small></div>
+      <div class="field"><label>Account Type *</label><select id="eaType" class="select" style="width:100%"><option value="SAVINGS" ${acc[3] === 'SAVINGS' ? 'selected' : ''}>SAVINGS</option><option value="CURRENT" ${acc[3] === 'CURRENT' ? 'selected' : ''}>CURRENT</option></select></div>
+      <div class="field"><label>Account Status</label><select id="eaStatus" class="select" style="width:100%"><option value="ACTIVE" ${acc[2] === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option><option value="INACTIVE" ${acc[2] === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option><option value="CLOSED" ${acc[2] === 'CLOSED' ? 'selected' : ''}>CLOSED</option></select></div>
+      <div class="field full"><label>Current Ledger Balance</label><input value="${money(bal)}" disabled /><small class="field-tip">Protected balance (₹${bal.toLocaleString('en-IN')}). Use Deposit / Withdraw to move money.</small></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const cid = Number($('#eaCid').value);
+    const acc_type = $('#eaType').value;
+    const status = $('#eaStatus').value;
+
+    if (!cid) {
+      $('#editModalError').innerHTML = '<div class="alert">Please select a valid customer.</div>';
+      return;
+    }
+    if (status === 'CLOSED' && bal > 0) {
+      $('#editModalError').innerHTML = `<div class="alert">Cannot close account with non-zero balance (${money(bal)}). Please withdraw all funds first.</div>`;
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/accounts/${accId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ cid, acc_type, status })
+      });
+      closeEditModal();
+      toast(`Account #${accId} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditTransaction(tId) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let tx = (state.data.transactions || []).find(t => Number(t[0]) === Number(tId));
+  if (!tx) {
+    try {
+      const res = await api(`/transactions/${tId}`);
+      const d = res.data;
+      tx = [d.t_id, d.acc_id, d.trans_date, d.type, d.amount, d.mode, d.status];
+    } catch (e) {
+      return toast('Transaction not found: ' + e.message, false);
+    }
+  }
+
+  $('#editModalTitle').textContent = 'Edit Transaction';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#fefce8;border-left:4px solid #f59e0b;color:#854d0e">
+      <b>Ledger Integrity Protection:</b> Transaction Amount, Type, and Account are immutable audit records. Safe metadata (Mode) can be updated below. To correct erroneous amounts, use Delete / Reverse.
+    </div>
+  `;
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>Transaction ID</label><input value="#${tx[0]}" disabled /></div>
+      <div class="field"><label>Account ID</label><input value="#${tx[1]}" disabled /></div>
+      <div class="field"><label>Transaction Type</label><input value="${tx[3]}" disabled /></div>
+      <div class="field"><label>Amount</label><input value="${money(tx[4])}" disabled /></div>
+      <div class="field"><label>Transaction Status</label><input value="${tx[6] || tx[5] || 'SUCCESS'}" disabled /></div>
+      <div class="field"><label>Transaction Mode (Editable)</label><select id="etMode" class="select" style="width:100%"><option value="ONLINE" ${tx[5] === 'ONLINE' ? 'selected' : ''}>ONLINE</option><option value="CASH" ${tx[5] === 'CASH' ? 'selected' : ''}>CASH</option><option value="ATM" ${tx[5] === 'ATM' ? 'selected' : ''}>ATM</option><option value="POS" ${tx[5] === 'POS' ? 'selected' : ''}>POS</option><option value="CHEQUE" ${tx[5] === 'CHEQUE' ? 'selected' : ''}>CHEQUE</option><option value="UPI" ${tx[5] === 'UPI' ? 'selected' : ''}>UPI</option></select><small class="field-tip">Safe metadata channel</small></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const mode = $('#etMode').value;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/transactions/${tId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ mode })
+      });
+      closeEditModal();
+      toast(`Transaction #${tId} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditLoan(lId) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let loan = (state.data.loans || []).find(l => Number(l[0]) === Number(lId));
+  if (!loan) {
+    try {
+      const res = await api(`/loans/${lId}`);
+      const d = res.data;
+      loan = [d.l_id, d.cid, d.l_type, d.amount, d.interest, d.term, d.status];
+    } catch (e) {
+      return toast('Loan not found: ' + e.message, false);
+    }
+  }
+
+  if (!state.data.customers) await load('/customers', 'customers');
+  const custs = state.data.customers || [];
+  const isSettled = (loan[6] || 'ACTIVE') === 'SETTLED' || (loan[6] || 'ACTIVE') === 'CLOSED';
+
+  $('#editModalTitle').textContent = 'Edit Loan';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing <b>Loan</b> Record <code>#${loan[0]}</code> • Changes to principal amount update live loan distribution.
+    </div>
+  `;
+
+  const custOptions = custs.map(c => 
+    `<option value="${c[0]}" ${Number(c[0]) === Number(loan[1]) ? 'selected' : ''}>${c[2]} ${c[3] || ''} (CID #${c[0]})</option>`
+  ).join('');
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field full"><label>Borrower (Customer) *</label><select id="elCid" class="select" style="width:100%">${custOptions}</select></div>
+      <div class="field"><label>Loan Type *</label><select id="elType" class="select" style="width:100%"><option value="HOME" ${loan[2] === 'HOME' ? 'selected' : ''}>HOME</option><option value="CAR" ${loan[2] === 'CAR' ? 'selected' : ''}>CAR</option><option value="PERSONAL" ${loan[2] === 'PERSONAL' ? 'selected' : ''}>PERSONAL</option><option value="EDUCATION" ${loan[2] === 'EDUCATION' ? 'selected' : ''}>EDUCATION</option><option value="BUSINESS" ${loan[2] === 'BUSINESS' ? 'selected' : ''}>BUSINESS</option></select></div>
+      <div class="field"><label>Principal Amount (₹) *</label><input id="elAmount" type="number" min="1" step="1000" value="${loan[3]}" ${isSettled ? 'disabled' : ''} /><small class="field-tip">${isSettled ? 'Settled loans cannot alter principal' : 'Sanctioned principal amount'}</small></div>
+      <div class="field"><label>Annual Interest Rate (%) *</label><input id="elInterest" type="number" min="0" step="0.01" value="${loan[4]}" required /></div>
+      <div class="field"><label>Tenure (Months) *</label><input id="elTerm" type="number" min="1" step="1" value="${loan[5]}" required /></div>
+      <div class="field full"><label>Loan Status</label><select id="elStatus" class="select" style="width:100%"><option value="ACTIVE" ${loan[6] === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option><option value="SETTLED" ${loan[6] === 'SETTLED' ? 'selected' : ''}>SETTLED</option><option value="CLOSED" ${loan[6] === 'CLOSED' ? 'selected' : ''}>CLOSED</option></select></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const cid = Number($('#elCid').value);
+    const l_type = $('#elType').value;
+    const amount = Number($('#elAmount').value);
+    const interest = Number($('#elInterest').value);
+    const term = Number($('#elTerm').value);
+    const status = $('#elStatus').value;
+
+    if (!cid) {
+      $('#editModalError').innerHTML = '<div class="alert">Please select a valid customer.</div>';
+      return;
+    }
+    if (isNaN(amount) || amount <= 0) {
+      $('#editModalError').innerHTML = '<div class="alert">Principal amount must be greater than 0.</div>';
+      return;
+    }
+    if (isNaN(interest) || interest < 0) {
+      $('#editModalError').innerHTML = '<div class="alert">Interest rate must be 0 or greater.</div>';
+      return;
+    }
+    if (isNaN(term) || term <= 0 || !Number.isInteger(term)) {
+      $('#editModalError').innerHTML = '<div class="alert">Tenure must be a positive integer number of months.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/loans/${lId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ cid, l_type, amount, interest, term, status })
+      });
+      closeEditModal();
+      toast(`Loan #${lId} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditCreditCard(pno) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let card = (state.data.cards || []).find(c => String(c[0]) === String(pno));
+  if (!card) {
+    try {
+      const res = await api(`/creditcards/${pno}`);
+      const d = res.data;
+      card = [d.pno, d.type, d.card_limit, d.expiry, d.status, null, d.cid];
+    } catch (e) {
+      return toast('Credit card not found: ' + e.message, false);
+    }
+  }
+
+  if (!state.data.customers) await load('/customers', 'customers');
+  const custs = state.data.customers || [];
+
+  $('#editModalTitle').textContent = 'Edit Credit Card';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing Credit Card <code>•••• •••• •••• ${String(pno).slice(-4)}</code> • CVV and full card numbers are protected.
+    </div>
+  `;
+
+  const custOptions = custs.map(c => 
+    `<option value="${c[0]}" ${Number(c[0]) === Number(card[6]) ? 'selected' : ''}>${c[2]} ${c[3] || ''} (CID #${c[0]})</option>`
+  ).join('');
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field full"><label>Cardholder (Customer) *</label><select id="eccCid" class="select" style="width:100%">${custOptions}</select></div>
+      <div class="field"><label>Card Network / Type *</label><select id="eccType" class="select" style="width:100%"><option value="VISA" ${card[1] === 'VISA' ? 'selected' : ''}>VISA</option><option value="MASTERCARD" ${card[1] === 'MASTERCARD' ? 'selected' : ''}>MASTERCARD</option><option value="RUPAY" ${card[1] === 'RUPAY' ? 'selected' : ''}>RUPAY</option><option value="AMEX" ${card[1] === 'AMEX' ? 'selected' : ''}>AMEX</option></select></div>
+      <div class="field"><label>Card Limit (₹) *</label><input id="eccLimit" type="number" min="1000" step="5000" value="${card[2]}" required /></div>
+      <div class="field"><label>Expiry Date</label><input id="eccExpiry" type="date" value="${toDateInput(card[3])}" /></div>
+      <div class="field"><label>Status</label><select id="eccStatus" class="select" style="width:100%"><option value="ACTIVE" ${card[4] === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option><option value="INACTIVE" ${card[4] === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option><option value="BLOCKED" ${card[4] === 'BLOCKED' ? 'selected' : ''}>BLOCKED</option><option value="CLOSED" ${card[4] === 'CLOSED' ? 'selected' : ''}>CLOSED</option></select></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const cid = Number($('#eccCid').value);
+    const type = $('#eccType').value;
+    const card_limit = Number($('#eccLimit').value);
+    const expiry = $('#eccExpiry').value.trim();
+    const status = $('#eccStatus').value;
+
+    if (!cid) {
+      $('#editModalError').innerHTML = '<div class="alert">Please select a valid customer.</div>';
+      return;
+    }
+    if (isNaN(card_limit) || card_limit <= 0) {
+      $('#editModalError').innerHTML = '<div class="alert">Card limit must be greater than 0.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/creditcards/${pno}`, {
+        method: 'PUT',
+        body: JSON.stringify({ cid, type, card_limit, expiry: expiry || null, status })
+      });
+      closeEditModal();
+      toast(`Credit card ending in ${String(pno).slice(-4)} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditBranch(bId) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let branch = (state.data.branches || []).find(b => Number(b[0]) === Number(bId));
+  if (!branch) {
+    try {
+      const res = await api(`/branches/${bId}`);
+      const d = res.data;
+      branch = [d.b_id, d.branch_name, d.city, d.state, d.pincode, d.ifsc, d.contact, d.status];
+    } catch (e) {
+      return toast('Branch not found: ' + e.message, false);
+    }
+  }
+
+  $('#editModalTitle').textContent = 'Edit Branch';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing <b>Branch</b> Record <code>#${branch[0]}</code> • IFSC codes must remain globally unique.
+    </div>
+  `;
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field full"><label>Branch Name *</label><input id="ebName" value="${escapeQuotes(branch[1] || '')}" required /></div>
+      <div class="field"><label>IFSC Code (Unique)</label><input id="ebIfsc" value="${escapeQuotes(branch[5] || '')}" style="text-transform:uppercase" /><small class="field-tip">Validated against all branch records</small></div>
+      <div class="field"><label>Contact Number</label><input id="ebContact" value="${escapeQuotes(branch[6] || '')}" /></div>
+      <div class="field"><label>City</label><input id="ebCity" value="${escapeQuotes(branch[2] || '')}" /></div>
+      <div class="field"><label>State</label><input id="ebState" value="${escapeQuotes(branch[3] || '')}" /></div>
+      <div class="field"><label>Pincode</label><input id="ebPin" value="${escapeQuotes(branch[4] || '')}" /></div>
+      <div class="field"><label>Status</label><select id="ebStatus" class="select" style="width:100%"><option value="ACTIVE" ${branch[7] === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option><option value="INACTIVE" ${branch[7] === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option></select></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const branch_name = $('#ebName').value.trim();
+    const ifsc = $('#ebIfsc').value.trim().toUpperCase();
+    const contact = $('#ebContact').value.trim();
+    const city = $('#ebCity').value.trim();
+    const stateVal = $('#ebState').value.trim();
+    const pincode = $('#ebPin').value.trim();
+    const status = $('#ebStatus').value;
+
+    if (!branch_name) {
+      $('#editModalError').innerHTML = '<div class="alert">Branch name is required.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/branches/${bId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ branch_name, ifsc: ifsc || null, contact: contact || null, city: city || null, state: stateVal || null, pincode: pincode || null, status })
+      });
+      closeEditModal();
+      toast(`Branch #${bId} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditEmployee(empId) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let emp = (state.data.employees || []).find(e => Number(e[0]) === Number(empId));
+  if (!emp) {
+    try {
+      const res = await api(`/employees/${empId}`);
+      const d = res.data;
+      emp = [d.emp_id, d.first_name, d.last_name, d.salary, d.hire_date, d.b_id, d.status];
+    } catch (e) {
+      return toast('Employee not found: ' + e.message, false);
+    }
+  }
+
+  if (!state.data.branches) await load('/branches', 'branches');
+  const branches = state.data.branches || [];
+
+  $('#editModalTitle').textContent = 'Edit Employee';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing <b>Employee</b> Record <code>#${emp[0]}</code> • Customer assignments and branch links preserved.
+    </div>
+  `;
+
+  const branchOptions = '<option value="">None (Optional)</option>' + branches.map(b => 
+    `<option value="${b[0]}" ${Number(b[0]) === Number(emp[5]) ? 'selected' : ''}>${b[1]} (Branch #${b[0]})</option>`
+  ).join('');
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>First Name *</label><input id="eeFirst" value="${escapeQuotes(emp[1] || '')}" required /></div>
+      <div class="field"><label>Last Name</label><input id="eeLast" value="${escapeQuotes(emp[2] || '')}" /></div>
+      <div class="field"><label>Salary (₹)</label><input id="eeSalary" type="number" min="0" step="500" value="${emp[3] || 0}" /></div>
+      <div class="field"><label>Hire Date</label><input id="eeHireDate" type="date" value="${toDateInput(emp[4])}" /></div>
+      <div class="field full"><label>Assigned Branch</label><select id="eeBranch" class="select" style="width:100%">${branchOptions}</select></div>
+      <div class="field full"><label>Status</label><select id="eeStatus" class="select" style="width:100%"><option value="ACTIVE" ${emp[6] === 'ACTIVE' ? 'selected' : ''}>ACTIVE</option><option value="INACTIVE" ${emp[6] === 'INACTIVE' ? 'selected' : ''}>INACTIVE</option></select></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const first_name = $('#eeFirst').value.trim();
+    const last_name = $('#eeLast').value.trim();
+    const salary = $('#eeSalary').value !== '' ? Number($('#eeSalary').value) : null;
+    const hire_date = $('#eeHireDate').value.trim();
+    const b_id = $('#eeBranch').value ? Number($('#eeBranch').value) : null;
+    const status = $('#eeStatus').value;
+
+    if (!first_name) {
+      $('#editModalError').innerHTML = '<div class="alert">First name is required.</div>';
+      return;
+    }
+    if (salary !== null && (isNaN(salary) || salary < 0)) {
+      $('#editModalError').innerHTML = '<div class="alert">Salary must be 0 or greater.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/employees/${empId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ first_name, last_name: last_name || null, salary, hire_date: hire_date || null, b_id, status })
+      });
+      closeEditModal();
+      toast(`Employee #${empId} updated successfully!`);
+      await loadAll();
+      renderView(true);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditNominee(nId, returnAccId) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  let nom;
+  try {
+    const res = await api(`/nominees/${nId}`);
+    const d = res.data;
+    nom = [d.n_id, d.first_name, d.last_name, d.relationship, d.dob, d.cid, d.acc_id];
+  } catch (e) {
+    return toast('Nominee not found: ' + e.message, false);
+  }
+
+  if (!state.data.customers) await load('/customers', 'customers');
+  if (!state.data.accounts) await load('/accounts', 'accounts');
+  const custs = state.data.customers || [];
+  const accounts = state.data.accounts || [];
+
+  $('#editModalTitle').textContent = 'Edit Nominee';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing <b>Nominee</b> Record <code>#${nom[0]}</code> • Customer & Account ownership mappings updated atomically.
+    </div>
+  `;
+
+  const custOptions = custs.map(c => 
+    `<option value="${c[0]}" ${Number(c[0]) === Number(nom[5]) ? 'selected' : ''}>${c[2]} ${c[3] || ''} (CID #${c[0]})</option>`
+  ).join('');
+
+  const accOptions = accounts.map(a => 
+    `<option value="${a[0]}" ${Number(a[0]) === Number(nom[6]) ? 'selected' : ''}>Account #${a[0]} (${a[3]} - Owner CID #${a[4]})</option>`
+  ).join('');
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field"><label>First Name *</label><input id="enFirst" value="${escapeQuotes(nom[1] || '')}" required /></div>
+      <div class="field"><label>Last Name</label><input id="enLast" value="${escapeQuotes(nom[2] || '')}" /></div>
+      <div class="field"><label>Relationship</label><input id="enRel" value="${escapeQuotes(nom[3] || '')}" placeholder="e.g. Spouse, Son, Mother" /></div>
+      <div class="field"><label>Date of Birth</label><input id="enDob" type="date" value="${toDateInput(nom[4])}" /></div>
+      <div class="field full"><label>Associated Customer *</label><select id="enCid" class="select" style="width:100%">${custOptions}</select></div>
+      <div class="field full"><label>Associated Account *</label><select id="enAcc" class="select" style="width:100%">${accOptions}</select></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Changes';
+
+  saveBtn.onclick = async () => {
+    const first_name = $('#enFirst').value.trim();
+    const last_name = $('#enLast').value.trim();
+    const relationship = $('#enRel').value.trim();
+    const dob = $('#enDob').value.trim();
+    const cid = Number($('#enCid').value);
+    const acc_id = Number($('#enAcc').value);
+
+    if (!first_name) {
+      $('#editModalError').innerHTML = '<div class="alert">First name is required.</div>';
+      return;
+    }
+    if (!cid || !acc_id) {
+      $('#editModalError').innerHTML = '<div class="alert">Customer and Account associations are required.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/nominees/${nId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ first_name, last_name: last_name || null, relationship: relationship || null, dob: dob || null, cid, acc_id })
+      });
+      closeEditModal();
+      toast(`Nominee #${nId} updated successfully!`);
+      await loadAll();
+      if (returnAccId !== undefined && returnAccId !== null) {
+        await openNomineeManager(returnAccId);
+      } else {
+        renderView(true);
+      }
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Changes';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}
+
+async function openEditPhone(cid, phone, custName) {
+  editModalDom();
+  if ($('#editModalError')) $('#editModalError').innerHTML = '';
+
+  $('#editModalTitle').textContent = 'Edit Phone Number';
+  $('#editModalBanner').innerHTML = `
+    <div class="policy-banner" style="margin-bottom:14px;background:#f8faff;border-left:4px solid #4f46e5;color:#3730a3">
+      Editing phone for <b>${escapeQuotes(custName)}</b> (Customer <code>#${cid}</code>).
+    </div>
+  `;
+
+  $('#editModalBody').innerHTML = `
+    <div class="form-grid">
+      <div class="field full"><label>Current Phone Number</label><input value="${phone}" disabled /></div>
+      <div class="field full"><label>New Phone Number *</label><input id="epNewPhone" value="${phone}" placeholder="e.g. 9876543210" required /><small class="field-tip">Must be a valid 5 to 15 digit telephone number</small></div>
+    </div>
+  `;
+
+  const saveBtn = $('#editModalSaveBtn');
+  saveBtn.disabled = false;
+  saveBtn.textContent = 'Save Phone';
+
+  saveBtn.onclick = async () => {
+    const newPhone = $('#epNewPhone').value.trim();
+    if (!newPhone) {
+      $('#editModalError').innerHTML = '<div class="alert">Phone number cannot be blank.</div>';
+      return;
+    }
+    if (newPhone.length < 5 || newPhone.length > 15) {
+      $('#editModalError').innerHTML = '<div class="alert">Phone number must be between 5 and 15 digits.</div>';
+      return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    $('#editModalError').innerHTML = '';
+
+    try {
+      await api(`/customers/${cid}/phones/${encodeURIComponent(phone)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ phone: newPhone })
+      });
+      closeEditModal();
+      toast('Phone number updated successfully!');
+      await openPhoneManager(cid, custName);
+    } catch (err) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Phone';
+      $('#editModalError').innerHTML = `<div class="alert">${err.message}</div>`;
+    }
+  };
+
+  $('#editModal').classList.add('open');
+}

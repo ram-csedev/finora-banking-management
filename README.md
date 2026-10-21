@@ -37,6 +37,10 @@ A relational database-based banking and loan management system developed as an a
   - [Supported Deletion Operations](#supported-deletion-operations)
   - [Transaction Deletion and Balance Reversal](#transaction-deletion-and-balance-reversal)
   - [Error Handling and Verification](#error-handling-and-verification)
+- [Record Editing & Referential Integrity](#record-editing--referential-integrity)
+  - [Key Capabilities](#key-capabilities-1)
+  - [Supported Entities & Editable vs. Protected Fields](#supported-entities--editable-vs-protected-fields)
+  - [Edit API Endpoints](#edit-api-endpoints)
 - [Sample Workflow](#sample-workflow)
 - [API Documentation](#api-documentation)
 - [Frontend Overview](#frontend-overview)
@@ -324,6 +328,56 @@ The local Oracle XE test suite reported 26 passing assertions, covering deletion
 
 ---
 
+<<<<<<< HEAD
+=======
+## Record Editing & Referential Integrity
+
+Finora implements full record editing capabilities across all banking entities with strict referential integrity, financial-balance safeguards, and atomic multi-table synchronization.
+
+### Key Capabilities
+
+- **Modal-Based Prefilled Forms:** Dedicated modal forms prefill existing database values for the selected entity, providing full context without resorting to disruptive browser `prompt()` dialogs.
+- **Client & Server-Side Validation:** All fields undergo strict verification both in the UI and at the Express API layer using parameterized Oracle bind variables.
+- **Financial Balance & Ledger Protection:** Direct editing of account balances, transaction amounts, transaction types, and accounts is strictly prohibited through edit forms. Balances can only change via authorized transaction procedures (`deposit_money`, `withdraw_money`, `transfer_money`) or deletion/reversal workflows.
+- **Referential Consistency & Atomic Sync:** Updating customer assignments on accounts or nominees automatically synchronizes related `Owns` mappings within the same atomic database transaction.
+- **Immutable Primary Keys:** Primary keys (`cid`, `acc_id`, `t_id`, `l_id`, `pno`, `b_id`, `emp_id`, `n_id`) are immutable in edit operations to prevent orphan records and constraint cascades.
+- **Unique Constraint Guards:** Uniqueness is rigorously enforced for PAN (`Customer`) and IFSC (`Branch`), checking against all existing records excluding the current entity.
+
+### Supported Entities & Editable vs. Protected Fields
+
+| Entity | Editable Fields | Intentionally Protected / Immutable Fields | Integrity & Propagation Rules |
+| :--- | :--- | :--- | :--- |
+| **Customers** | First Name, Last Name, PAN, DOB, City, State, Pincode, Assigned Employee, Status | Customer ID (`cid`) | Validates assigned Employee ID exists; ensures unique PAN; preserves associated accounts and loans. |
+| **Accounts** | Account Type (`SAVINGS`/`CURRENT`), Status (`ACTIVE`/`INACTIVE`/`CLOSED`), Customer Assignment (`cid`) | Account ID (`acc_id`), Ledger Balance (`balance`) | Direct balance modification rejected (400); closing requires zero balance; changing customer updates `Owns` atomically. |
+| **Transactions** | Safe Metadata (`mode`: `ONLINE`, `CASH`, `ATM`, `POS`, `CHEQUE`, `UPI`) | Transaction ID (`t_id`), Account (`acc_id`), Type, Amount, Status | Amount, Account, and Type cannot be edited directly to protect accounting balance; corrections must use Delete/Reversal. |
+| **Loans** | Loan Type, Principal Amount (active loans), Annual Interest Rate, Tenure (months), Status | Loan ID (`l_id`) | Principal amount edits permitted only on active loans with validation (`> 0`); settled/closed loans cannot modify principal. |
+| **Credit Cards** | Card Type / Network, Card Limit, Expiry Date, Status | Card Number (`pno`), CVV | CVV and full card numbers protected from exposure; card limit must be positive (`> 0`); validates customer existence. |
+| **Branches** | Branch Name, IFSC Code, Contact, City, State, Pincode, Status | Branch ID (`b_id`) | IFSC code uniqueness enforced against other branches; updating branch preserves employee assignments. |
+| **Employees** | First Name, Last Name, Salary, Hire Date, Branch Assignment (`b_id`), Status | Employee ID (`emp_id`) | Validates assigned Branch ID exists; preserves customer and responsibility assignments unless explicitly changed. |
+| **Nominees** | First Name, Last Name, Relationship, DOB, Customer (`cid`), Account (`acc_id`) | Nominee ID (`n_id`) | Customer and Account foreign keys validated; atomically updates `Owns` relationship when associations change. |
+| **Customer Phones** | Phone Number | Customer ID (`cid`) | Validates phone length (5–15 digits) and rejects duplicates for the same customer. |
+| **Owns** | Customer (`cid`), Account (`acc_id`), Nominee (`n_id`) | — | All three foreign keys validated against parent tables before atomic tuple update. |
+| **Responsible_For** | Employee (`emp_id`), Transaction (`t_id`), Loan (`l_id`), Branch (`b_id`) | — | All four foreign keys validated before reassignment to preserve audit records. |
+
+### Edit API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` / `PUT` | `/api/customers/:cid` | Retrieve or update customer details, PAN, location, and employee assignment |
+| `GET` / `PUT` | `/api/accounts/:acc_id` | Retrieve or update account type, status, and customer owner (balance protected) |
+| `GET` / `PUT` | `/api/transactions/:t_id` | Retrieve or update transaction safe metadata (`mode`) |
+| `GET` / `PUT` | `/api/loans/:l_id` | Retrieve or update loan terms, interest, tenure, and principal amount |
+| `GET` / `PUT` | `/api/creditcards/:pno` | Retrieve or update credit card network, limit, expiry date, and status |
+| `GET` / `PUT` | `/api/branches/:b_id` | Retrieve or update branch name, unique IFSC code, contact, and address |
+| `GET` / `PUT` | `/api/employees/:emp_id` | Retrieve or update staff name, salary, hire date, and branch assignment |
+| `GET` / `PUT` | `/api/nominees/:n_id` | Retrieve or update nominee details with atomic `Owns` synchronization |
+| `PUT` | `/api/customers/:cid/phones/:phone` | Update phone number for a customer with duplicate verification |
+| `PUT` | `/api/owns` | Update customer-account-nominee ownership relationship |
+| `PUT` | `/api/responsible-for` | Update employee-transaction-loan-branch responsibility relationship |
+
+---
+
+>>>>>>> b514995 (Add full record editing with referential integrity)
 ## Sample Workflow
 
 ```text

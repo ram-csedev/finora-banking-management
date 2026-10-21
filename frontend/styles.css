@@ -47,6 +47,13 @@
 .btn-action-purple:hover:not(:disabled){background:#e6e0fe}
 .btn-action-outline-danger{background:transparent;color:#c53c3c;border:1px solid #ffd6d6}
 .btn-action-outline-danger:hover:not(:disabled){background:#fff0f0;border-color:#c53c3c}
+.btn-action-primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+.btn-action-primary:hover:not(:disabled){background:#1f2947}
+.btn-action-edit{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.btn-action-edit:hover:not(:disabled){background:#dbeafe;border-color:#93c5fd}
+.field-tip{font-size:10px;color:#64748b;margin-top:3px;display:block}
+.field input:disabled,.field select:disabled{background:#f8fafc;color:#64748b;cursor:not-allowed;border-color:#e2e8f0}
+
 
 .actions-cell{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
 .card-actions-row{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap}

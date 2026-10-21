@@ -1396,6 +1396,1379 @@ app.post('/api/creditcards', async (req, res) => {
 });
 
 // ============================================================================
+// RECORD EDITING ENDPOINTS (FULL EDIT WITH REFERENTIAL INTEGRITY)
+// ============================================================================
+
+function formatOracleError(error) {
+    if (!error || !error.message) return 'An unexpected database error occurred.';
+    const msg = error.message;
+    if (msg.includes('ORA-00001')) {
+        return 'Duplicate record error: A record with this unique identifier, PAN, or IFSC already exists.';
+    }
+    if (msg.includes('ORA-02291')) {
+        return 'Referential integrity error: The referenced parent entity (Customer, Branch, or Employee) does not exist.';
+    }
+    if (msg.includes('ORA-02292')) {
+        return 'Referential integrity error: Cannot modify this record because dependent child records exist.';
+    }
+    if (msg.includes('ORA-02290')) {
+        return 'Check constraint error: The provided data violates business constraints (e.g. negative amount/balance or invalid status).';
+    }
+    if (msg.includes('ORA-20')) {
+        const match = msg.match(/ORA-20\d{3}:\s*([^\n\r]+)/);
+        if (match && match[1]) return match[1].trim();
+    }
+    return msg;
+}
+
+// --- 1. CUSTOMERS ---
+app.get('/api/customers/:cid', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Customer ID is required' });
+        }
+        connection = await getConnection();
+        const hasStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
+        const query = hasStatus
+            ? "SELECT cid, pan, first_name, last_name, city, state, pincode, TO_CHAR(dob, 'YYYY-MM-DD') AS dob, emp_id, status FROM Customer WHERE cid = :cid"
+            : "SELECT cid, pan, first_name, last_name, city, state, pincode, TO_CHAR(dob, 'YYYY-MM-DD') AS dob, emp_id, 'ACTIVE' AS status FROM Customer WHERE cid = :cid";
+        const result = await connection.execute(query, { cid });
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                cid: r[0],
+                pan: r[1],
+                first_name: r[2],
+                last_name: r[3],
+                city: r[4],
+                state: r[5],
+                pincode: r[6],
+                dob: r[7],
+                emp_id: r[8],
+                status: r[9]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/customers/:cid:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/customers/:cid', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Customer ID is required' });
+        }
+        const { first_name, last_name, pan, dob, city, state: cust_state, pincode, emp_id, status } = req.body;
+
+        if (!first_name || !first_name.trim()) {
+            return res.status(400).json({ success: false, error: 'First name is required' });
+        }
+        const cleanFirst = first_name.trim();
+        const cleanLast = last_name && last_name.trim() ? last_name.trim() : null;
+        const cleanPan = pan && pan.trim() ? pan.trim().toUpperCase() : null;
+        const cleanCity = city && city.trim() ? city.trim() : null;
+        const cleanState = cust_state && cust_state.trim() ? cust_state.trim() : null;
+        const cleanPin = pincode && pincode.trim() ? pincode.trim() : null;
+
+        let cleanDob = null;
+        if (dob && String(dob).trim()) {
+            const dStr = String(dob).trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dStr) || isNaN(Date.parse(dStr))) {
+                return res.status(400).json({ success: false, error: 'Date of birth must be a valid date in YYYY-MM-DD format' });
+            }
+            cleanDob = dStr;
+        }
+
+        connection = await getConnection();
+
+        const custCheck = await connection.execute('SELECT cid, status FROM Customer WHERE cid = :cid', { cid });
+        if (!custCheck.rows || custCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Customer #${cid} not found` });
+        }
+        const currentCust = custCheck.rows[0];
+
+        if (cleanPan) {
+            const panCheck = await connection.execute(
+                'SELECT cid FROM Customer WHERE UPPER(pan) = UPPER(:pan) AND cid <> :cid',
+                { pan: cleanPan, cid }
+            );
+            if (panCheck.rows && panCheck.rows.length > 0) {
+                return res.status(400).json({ success: false, error: `PAN "${cleanPan}" is already registered to Customer #${panCheck.rows[0][0]}` });
+            }
+        }
+
+        let cleanEmpId = null;
+        if (emp_id !== undefined && emp_id !== null && String(emp_id).trim() !== '') {
+            cleanEmpId = Number(emp_id);
+            if (isNaN(cleanEmpId)) {
+                return res.status(400).json({ success: false, error: 'Employee ID must be a valid number' });
+            }
+            const empCheck = await connection.execute('SELECT emp_id FROM Employee WHERE emp_id = :emp_id', { emp_id: cleanEmpId });
+            if (!empCheck.rows || empCheck.rows.length === 0) {
+                return res.status(400).json({ success: false, error: `Assigned Employee with ID ${cleanEmpId} does not exist` });
+            }
+        }
+
+        let cleanStatus = currentCust[1] || 'ACTIVE';
+        if (status !== undefined && status !== null && String(status).trim() !== '') {
+            cleanStatus = String(status).trim().toUpperCase();
+            if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+                return res.status(400).json({ success: false, error: 'Customer status must be ACTIVE or INACTIVE' });
+            }
+        }
+
+        const hasStatus = await tableHasColumn(connection, 'CUSTOMER', 'STATUS');
+        let updateSql;
+        let binds = {
+            cid,
+            first_name: cleanFirst,
+            last_name: cleanLast,
+            pan: cleanPan,
+            dob: cleanDob,
+            city: cleanCity,
+            cust_state: cleanState,
+            pincode: cleanPin,
+            emp_id: cleanEmpId
+        };
+
+        if (hasStatus) {
+            updateSql = `UPDATE Customer SET
+                first_name = :first_name,
+                last_name = :last_name,
+                pan = :pan,
+                dob = CASE WHEN :dob IS NOT NULL THEN TO_DATE(:dob, 'YYYY-MM-DD') ELSE NULL END,
+                city = :city,
+                state = :cust_state,
+                pincode = :pincode,
+                emp_id = :emp_id,
+                status = :status
+            WHERE cid = :cid`;
+            binds.status = cleanStatus;
+        } else {
+            updateSql = `UPDATE Customer SET
+                first_name = :first_name,
+                last_name = :last_name,
+                pan = :pan,
+                dob = CASE WHEN :dob IS NOT NULL THEN TO_DATE(:dob, 'YYYY-MM-DD') ELSE NULL END,
+                city = :city,
+                state = :cust_state,
+                pincode = :pincode,
+                emp_id = :emp_id
+            WHERE cid = :cid`;
+        }
+
+        await connection.execute(updateSql, binds, { autoCommit: true });
+        res.json({
+            success: true,
+            message: `Customer #${cid} updated successfully`,
+            data: {
+                cid,
+                first_name: cleanFirst,
+                last_name: cleanLast,
+                pan: cleanPan,
+                dob: cleanDob,
+                city: cleanCity,
+                state: cleanState,
+                pincode: cleanPin,
+                emp_id: cleanEmpId,
+                status: cleanStatus
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/customers/:cid:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 2. ACCOUNTS ---
+app.get('/api/accounts/:acc_id', async (req, res) => {
+    let connection;
+    try {
+        const acc_id = Number(req.params.acc_id);
+        if (!acc_id || isNaN(acc_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Account ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT acc_id, balance, status, acc_type, cid FROM Account WHERE acc_id = :acc_id',
+            { acc_id }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Account #${acc_id} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                acc_id: r[0],
+                balance: Number(r[1]) || 0,
+                status: r[2],
+                acc_type: r[3],
+                cid: r[4]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/accounts/:acc_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/accounts/:acc_id', async (req, res) => {
+    let connection;
+    try {
+        const acc_id = Number(req.params.acc_id);
+        if (!acc_id || isNaN(acc_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Account ID is required' });
+        }
+        const { acc_type, status, cid, balance } = req.body;
+
+        connection = await getConnection();
+
+        const accCheck = await connection.execute(
+            'SELECT acc_id, balance, status, acc_type, cid FROM Account WHERE acc_id = :acc_id',
+            { acc_id }
+        );
+        if (!accCheck.rows || accCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Account #${acc_id} not found` });
+        }
+        const currentAcc = accCheck.rows[0];
+        const currentBal = Number(currentAcc[1]) || 0;
+        const currentStatus = currentAcc[2];
+        const currentCid = currentAcc[4];
+
+        if (balance !== undefined && balance !== null && Number(balance) !== currentBal) {
+            return res.status(400).json({
+                success: false,
+                error: 'Direct editing of account balance is prohibited. Use deposit, withdrawal, or transfer operations to modify balances.'
+            });
+        }
+
+        const cleanType = (acc_type && String(acc_type).trim()) ? String(acc_type).trim().toUpperCase() : currentAcc[3];
+
+        let cleanStatus = currentStatus;
+        if (status !== undefined && status !== null && String(status).trim() !== '') {
+            cleanStatus = String(status).trim().toUpperCase();
+            if (!['ACTIVE', 'INACTIVE', 'CLOSED'].includes(cleanStatus)) {
+                return res.status(400).json({ success: false, error: 'Account status must be ACTIVE, INACTIVE, or CLOSED' });
+            }
+            if (cleanStatus === 'CLOSED' && currentBal > 0) {
+                return res.status(400).json({
+                    success: false,
+                    error: `Cannot close account #${acc_id} with non-zero balance (₹${currentBal.toLocaleString('en-IN')}). Balance must be zero before closing.`
+                });
+            }
+        }
+
+        let cleanCid = currentCid;
+        let cidChanged = false;
+        if (cid !== undefined && cid !== null && String(cid).trim() !== '') {
+            cleanCid = Number(cid);
+            if (isNaN(cleanCid)) {
+                return res.status(400).json({ success: false, error: 'Customer ID must be a valid number' });
+            }
+            if (cleanCid !== currentCid) {
+                const custCheck = await connection.execute('SELECT cid FROM Customer WHERE cid = :cid', { cid: cleanCid });
+                if (!custCheck.rows || custCheck.rows.length === 0) {
+                    return res.status(400).json({ success: false, error: `Customer with ID ${cleanCid} does not exist` });
+                }
+                cidChanged = true;
+            }
+        }
+
+        await connection.execute(
+            'UPDATE Account SET acc_type = :acc_type, status = :status, cid = :cid WHERE acc_id = :acc_id',
+            { acc_type: cleanType, status: cleanStatus, cid: cleanCid, acc_id }
+        );
+
+        if (cidChanged) {
+            await connection.execute(
+                'UPDATE Owns SET cid = :new_cid WHERE acc_id = :acc_id',
+                { new_cid: cleanCid, acc_id }
+            );
+        }
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Account #${acc_id} updated successfully`,
+            data: {
+                acc_id,
+                balance: currentBal,
+                status: cleanStatus,
+                acc_type: cleanType,
+                cid: cleanCid
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/accounts/:acc_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 3. TRANSACTIONS ---
+app.get('/api/transactions/:t_id', async (req, res) => {
+    let connection;
+    try {
+        const t_id = Number(req.params.t_id);
+        if (!t_id || isNaN(t_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Transaction ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT t_id, acc_id, TO_CHAR(trans_date, \'YYYY-MM-DD\') AS trans_date, "TYPE", amount, "MODE", status FROM "TRANSACTION" WHERE t_id = :t_id',
+            { t_id }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                t_id: r[0],
+                acc_id: r[1],
+                trans_date: r[2],
+                type: r[3],
+                amount: Number(r[4]) || 0,
+                mode: r[5],
+                status: r[6]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/transactions/:t_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/transactions/:t_id', async (req, res) => {
+    let connection;
+    try {
+        const t_id = Number(req.params.t_id);
+        if (!t_id || isNaN(t_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Transaction ID is required' });
+        }
+        const { mode, amount, acc_id, type, status } = req.body;
+
+        connection = await getConnection();
+
+        const txCheck = await connection.execute(
+            'SELECT t_id, acc_id, TO_CHAR(trans_date, \'YYYY-MM-DD\') AS trans_date, "TYPE", amount, "MODE", status FROM "TRANSACTION" WHERE t_id = :t_id',
+            { t_id }
+        );
+        if (!txCheck.rows || txCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Transaction #${t_id} not found` });
+        }
+        const currentTx = txCheck.rows[0];
+        const curAccId = currentTx[1];
+        const curType = currentTx[3];
+        const curAmount = Number(currentTx[4]) || 0;
+        const curStatus = currentTx[6];
+
+        if (amount !== undefined && amount !== null && Number(amount) !== curAmount) {
+            return res.status(400).json({
+                success: false,
+                error: 'Direct modification of transaction amount is prohibited to preserve ledger integrity. Please use the Transaction Delete & Reversal workflow.'
+            });
+        }
+        if (acc_id !== undefined && acc_id !== null && Number(acc_id) !== curAccId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Direct modification of transaction account is prohibited to preserve ledger integrity.'
+            });
+        }
+        if (type !== undefined && type !== null && String(type).trim().toUpperCase() !== String(curType).trim().toUpperCase()) {
+            return res.status(400).json({
+                success: false,
+                error: 'Direct modification of transaction type is prohibited to preserve ledger integrity.'
+            });
+        }
+        if (status !== undefined && status !== null && String(status).trim().toUpperCase() !== String(curStatus).trim().toUpperCase()) {
+            return res.status(400).json({
+                success: false,
+                error: 'Transaction status cannot be directly edited. Use Reverse or Delete to alter transaction status.'
+            });
+        }
+
+        const cleanMode = (mode && String(mode).trim()) ? String(mode).trim().toUpperCase() : currentTx[5];
+
+        await connection.execute(
+            'UPDATE "TRANSACTION" SET "MODE" = :tx_mode WHERE t_id = :t_id',
+            { tx_mode: cleanMode, t_id },
+            { autoCommit: true }
+        );
+
+        res.json({
+            success: true,
+            message: `Transaction #${t_id} metadata updated successfully`,
+            data: {
+                t_id,
+                acc_id: curAccId,
+                type: curType,
+                amount: curAmount,
+                mode: cleanMode,
+                status: curStatus
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/transactions/:t_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 4. LOANS ---
+app.get('/api/loans/:l_id', async (req, res) => {
+    let connection;
+    try {
+        const l_id = Number(req.params.l_id);
+        if (!l_id || isNaN(l_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Loan ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT l_id, cid, l_type, amount, interest, term, status FROM Loan WHERE l_id = :l_id',
+            { l_id }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                l_id: r[0],
+                cid: r[1],
+                l_type: r[2],
+                amount: Number(r[3]) || 0,
+                interest: Number(r[4]) || 0,
+                term: Number(r[5]) || 0,
+                status: r[6]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/loans/:l_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/loans/:l_id', async (req, res) => {
+    let connection;
+    try {
+        const l_id = Number(req.params.l_id);
+        if (!l_id || isNaN(l_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Loan ID is required' });
+        }
+        const { cid, l_type, amount, interest, term, status } = req.body;
+
+        connection = await getConnection();
+
+        const loanCheck = await connection.execute(
+            'SELECT l_id, cid, l_type, amount, interest, term, status FROM Loan WHERE l_id = :l_id',
+            { l_id }
+        );
+        if (!loanCheck.rows || loanCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Loan #${l_id} not found` });
+        }
+        const curLoan = loanCheck.rows[0];
+        const curStatus = curLoan[6] || 'ACTIVE';
+        const curAmount = Number(curLoan[3]);
+
+        let cleanCid = curLoan[1];
+        if (cid !== undefined && cid !== null && String(cid).trim() !== '') {
+            cleanCid = Number(cid);
+            if (isNaN(cleanCid)) {
+                return res.status(400).json({ success: false, error: 'Customer ID must be a valid number' });
+            }
+            if (cleanCid !== curLoan[1]) {
+                const custCheck = await connection.execute('SELECT cid FROM Customer WHERE cid = :cid', { cid: cleanCid });
+                if (!custCheck.rows || custCheck.rows.length === 0) {
+                    return res.status(400).json({ success: false, error: `Customer with ID ${cleanCid} does not exist` });
+                }
+            }
+        }
+
+        const cleanType = (l_type && String(l_type).trim()) ? String(l_type).trim().toUpperCase() : curLoan[2];
+
+        let cleanAmount = curAmount;
+        if (amount !== undefined && amount !== null && String(amount).trim() !== '') {
+            cleanAmount = Number(amount);
+            if (isNaN(cleanAmount) || cleanAmount <= 0) {
+                return res.status(400).json({ success: false, error: 'Loan principal amount must be greater than 0' });
+            }
+            if (['SETTLED', 'CLOSED'].includes(curStatus) && cleanAmount !== curAmount) {
+                return res.status(400).json({ success: false, error: `Cannot modify principal amount of a ${curStatus.toLowerCase()} loan` });
+            }
+        }
+
+        let cleanInterest = Number(curLoan[4]);
+        if (interest !== undefined && interest !== null && String(interest).trim() !== '') {
+            cleanInterest = Number(interest);
+            if (isNaN(cleanInterest) || cleanInterest < 0) {
+                return res.status(400).json({ success: false, error: 'Annual interest rate must be 0 or greater' });
+            }
+        }
+
+        let cleanTerm = Number(curLoan[5]);
+        if (term !== undefined && term !== null && String(term).trim() !== '') {
+            cleanTerm = Number(term);
+            if (isNaN(cleanTerm) || cleanTerm <= 0 || !Number.isInteger(cleanTerm)) {
+                return res.status(400).json({ success: false, error: 'Tenure must be a positive integer number of months' });
+            }
+        }
+
+        let cleanStatus = curStatus;
+        if (status !== undefined && status !== null && String(status).trim() !== '') {
+            cleanStatus = String(status).trim().toUpperCase();
+            if (!['ACTIVE', 'SETTLED', 'CLOSED'].includes(cleanStatus)) {
+                return res.status(400).json({ success: false, error: 'Loan status must be ACTIVE, SETTLED, or CLOSED' });
+            }
+        }
+
+        await connection.execute(
+            `UPDATE Loan SET
+                cid = :cid,
+                l_type = :l_type,
+                amount = :amount,
+                interest = :interest,
+                term = :term,
+                status = :status
+            WHERE l_id = :l_id`,
+            {
+                cid: cleanCid,
+                l_type: cleanType,
+                amount: cleanAmount,
+                interest: cleanInterest,
+                term: cleanTerm,
+                status: cleanStatus,
+                l_id
+            },
+            { autoCommit: true }
+        );
+
+        res.json({
+            success: true,
+            message: `Loan #${l_id} updated successfully`,
+            data: {
+                l_id,
+                cid: cleanCid,
+                l_type: cleanType,
+                amount: cleanAmount,
+                interest: cleanInterest,
+                term: cleanTerm,
+                status: cleanStatus
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/loans/:l_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 5. CREDIT CARDS ---
+app.get('/api/creditcards/:pno', async (req, res) => {
+    let connection;
+    try {
+        const pno = String(req.params.pno).trim();
+        if (!pno) {
+            return res.status(400).json({ success: false, error: 'Card number is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT pno, "TYPE", card_limit, TO_CHAR(expiry, \'YYYY-MM-DD\') AS expiry, status, cvv, cid FROM CreditCard WHERE pno = :pno',
+            { pno }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Credit card #${pno} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                pno: r[0],
+                type: r[1],
+                card_limit: Number(r[2]) || 0,
+                expiry: r[3],
+                status: r[4],
+                cid: r[6]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/creditcards/:pno:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/creditcards/:pno', async (req, res) => {
+    let connection;
+    try {
+        const pno = String(req.params.pno).trim();
+        if (!pno) {
+            return res.status(400).json({ success: false, error: 'Card number is required' });
+        }
+        const { type, card_limit, expiry, status, cid } = req.body;
+
+        connection = await getConnection();
+
+        const cardCheck = await connection.execute(
+            'SELECT pno, "TYPE", card_limit, TO_CHAR(expiry, \'YYYY-MM-DD\') AS expiry, status, cvv, cid FROM CreditCard WHERE pno = :pno',
+            { pno }
+        );
+        if (!cardCheck.rows || cardCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Credit card #${pno} not found` });
+        }
+        const curCard = cardCheck.rows[0];
+
+        let cleanCid = curCard[6];
+        if (cid !== undefined && cid !== null && String(cid).trim() !== '') {
+            cleanCid = Number(cid);
+            if (isNaN(cleanCid)) {
+                return res.status(400).json({ success: false, error: 'Customer ID must be a valid number' });
+            }
+            if (cleanCid !== curCard[6]) {
+                const custCheck = await connection.execute('SELECT cid FROM Customer WHERE cid = :cid', { cid: cleanCid });
+                if (!custCheck.rows || custCheck.rows.length === 0) {
+                    return res.status(400).json({ success: false, error: `Customer with ID ${cleanCid} does not exist` });
+                }
+            }
+        }
+
+        const cleanType = (type && String(type).trim()) ? String(type).trim().toUpperCase() : curCard[1];
+
+        let cleanLimit = Number(curCard[2]);
+        if (card_limit !== undefined && card_limit !== null && String(card_limit).trim() !== '') {
+            cleanLimit = Number(card_limit);
+            if (isNaN(cleanLimit) || cleanLimit <= 0) {
+                return res.status(400).json({ success: false, error: 'Card limit must be greater than 0' });
+            }
+        }
+
+        let cleanExpiry = curCard[3];
+        if (expiry && String(expiry).trim()) {
+            const expStr = String(expiry).trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(expStr) || isNaN(Date.parse(expStr))) {
+                return res.status(400).json({ success: false, error: 'Expiry date must be in YYYY-MM-DD format' });
+            }
+            cleanExpiry = expStr;
+        }
+
+        let cleanStatus = curCard[4] || 'ACTIVE';
+        if (status !== undefined && status !== null && String(status).trim() !== '') {
+            cleanStatus = String(status).trim().toUpperCase();
+            if (!['ACTIVE', 'INACTIVE', 'BLOCKED', 'CLOSED'].includes(cleanStatus)) {
+                return res.status(400).json({ success: false, error: 'Card status must be ACTIVE, INACTIVE, BLOCKED, or CLOSED' });
+            }
+        }
+
+        await connection.execute(
+            `UPDATE CreditCard SET
+                cid = :cid,
+                "TYPE" = :card_type,
+                card_limit = :card_limit,
+                expiry = CASE WHEN :expiry IS NOT NULL THEN TO_DATE(:expiry, 'YYYY-MM-DD') ELSE expiry END,
+                status = :status
+            WHERE pno = :pno`,
+            {
+                cid: cleanCid,
+                card_type: cleanType,
+                card_limit: cleanLimit,
+                expiry: cleanExpiry,
+                status: cleanStatus,
+                pno
+            },
+            { autoCommit: true }
+        );
+
+        res.json({
+            success: true,
+            message: `Credit card ending in ${pno.slice(-4)} updated successfully`,
+            data: {
+                pno,
+                cid: cleanCid,
+                type: cleanType,
+                card_limit: cleanLimit,
+                expiry: cleanExpiry,
+                status: cleanStatus
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/creditcards/:pno:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 6. BRANCHES ---
+app.get('/api/branches/:b_id', async (req, res) => {
+    let connection;
+    try {
+        const b_id = Number(req.params.b_id);
+        if (!b_id || isNaN(b_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Branch ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT b_id, branch_name, city, state, pincode, ifsc, contact, status FROM Branch WHERE b_id = :b_id',
+            { b_id }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                b_id: r[0],
+                branch_name: r[1],
+                city: r[2],
+                state: r[3],
+                pincode: r[4],
+                ifsc: r[5],
+                contact: r[6],
+                status: r[7]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/branches/:b_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/branches/:b_id', async (req, res) => {
+    let connection;
+    try {
+        const b_id = Number(req.params.b_id);
+        if (!b_id || isNaN(b_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Branch ID is required' });
+        }
+        const { branch_name, ifsc, contact, city, state: br_state, pincode, status } = req.body;
+
+        if (!branch_name || !branch_name.trim()) {
+            return res.status(400).json({ success: false, error: 'Branch name is required' });
+        }
+        const cleanName = branch_name.trim();
+        const cleanIfsc = ifsc && ifsc.trim() ? ifsc.trim().toUpperCase() : null;
+        const cleanContact = contact && contact.trim() ? contact.trim() : null;
+        const cleanCity = city && city.trim() ? city.trim() : null;
+        const cleanState = br_state && br_state.trim() ? br_state.trim() : null;
+        const cleanPin = pincode && pincode.trim() ? pincode.trim() : null;
+
+        connection = await getConnection();
+
+        const branchCheck = await connection.execute(
+            'SELECT b_id, status FROM Branch WHERE b_id = :b_id',
+            { b_id }
+        );
+        if (!branchCheck.rows || branchCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Branch #${b_id} not found` });
+        }
+
+        if (cleanIfsc) {
+            const ifscCheck = await connection.execute(
+                'SELECT b_id FROM Branch WHERE UPPER(ifsc) = UPPER(:ifsc) AND b_id <> :b_id',
+                { ifsc: cleanIfsc, b_id }
+            );
+            if (ifscCheck.rows && ifscCheck.rows.length > 0) {
+                return res.status(400).json({ success: false, error: `IFSC code "${cleanIfsc}" is already registered to Branch #${ifscCheck.rows[0][0]}` });
+            }
+        }
+
+        let cleanStatus = branchCheck.rows[0][1] || 'ACTIVE';
+        if (status !== undefined && status !== null && String(status).trim() !== '') {
+            cleanStatus = String(status).trim().toUpperCase();
+            if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+                return res.status(400).json({ success: false, error: 'Branch status must be ACTIVE or INACTIVE' });
+            }
+        }
+
+        await connection.execute(
+            `UPDATE Branch SET
+                branch_name = :branch_name,
+                ifsc = :ifsc,
+                contact = :contact,
+                city = :city,
+                state = :br_state,
+                pincode = :pincode,
+                status = :status
+            WHERE b_id = :b_id`,
+            {
+                branch_name: cleanName,
+                ifsc: cleanIfsc,
+                contact: cleanContact,
+                city: cleanCity,
+                br_state: cleanState,
+                pincode: cleanPin,
+                status: cleanStatus,
+                b_id
+            },
+            { autoCommit: true }
+        );
+
+        res.json({
+            success: true,
+            message: `Branch #${b_id} (${cleanName}) updated successfully`,
+            data: {
+                b_id,
+                branch_name: cleanName,
+                ifsc: cleanIfsc,
+                contact: cleanContact,
+                city: cleanCity,
+                state: cleanState,
+                pincode: cleanPin,
+                status: cleanStatus
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/branches/:b_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 7. EMPLOYEES ---
+app.get('/api/employees/:emp_id', async (req, res) => {
+    let connection;
+    try {
+        const emp_id = Number(req.params.emp_id);
+        if (!emp_id || isNaN(emp_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Employee ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT emp_id, first_name, last_name, salary, TO_CHAR(hire_date, \'YYYY-MM-DD\') AS hire_date, b_id, status FROM Employee WHERE emp_id = :emp_id',
+            { emp_id }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                emp_id: r[0],
+                first_name: r[1],
+                last_name: r[2],
+                salary: Number(r[3]) || 0,
+                hire_date: r[4],
+                b_id: r[5],
+                status: r[6]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/employees/:emp_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/employees/:emp_id', async (req, res) => {
+    let connection;
+    try {
+        const emp_id = Number(req.params.emp_id);
+        if (!emp_id || isNaN(emp_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Employee ID is required' });
+        }
+        const { first_name, last_name, salary, hire_date, b_id, status } = req.body;
+
+        if (!first_name || !first_name.trim()) {
+            return res.status(400).json({ success: false, error: 'First name is required' });
+        }
+        const cleanFirst = first_name.trim();
+        const cleanLast = last_name && last_name.trim() ? last_name.trim() : null;
+
+        connection = await getConnection();
+
+        const empCheck = await connection.execute(
+            'SELECT emp_id, status, salary, TO_CHAR(hire_date, \'YYYY-MM-DD\'), b_id FROM Employee WHERE emp_id = :emp_id',
+            { emp_id }
+        );
+        if (!empCheck.rows || empCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Employee #${emp_id} not found` });
+        }
+        const curEmp = empCheck.rows[0];
+
+        let cleanSalary = Number(curEmp[2]);
+        if (salary !== undefined && salary !== null && String(salary).trim() !== '') {
+            cleanSalary = Number(salary);
+            if (isNaN(cleanSalary) || cleanSalary < 0) {
+                return res.status(400).json({ success: false, error: 'Salary must be 0 or greater' });
+            }
+        }
+
+        let cleanHireDate = curEmp[3];
+        if (hire_date && String(hire_date).trim()) {
+            const hStr = String(hire_date).trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(hStr) || isNaN(Date.parse(hStr))) {
+                return res.status(400).json({ success: false, error: 'Hire date must be in YYYY-MM-DD format' });
+            }
+            cleanHireDate = hStr;
+        }
+
+        let cleanBid = null;
+        if (b_id !== undefined && b_id !== null && String(b_id).trim() !== '') {
+            cleanBid = Number(b_id);
+            if (isNaN(cleanBid)) {
+                return res.status(400).json({ success: false, error: 'Branch ID must be a valid number' });
+            }
+            const brCheck = await connection.execute('SELECT b_id FROM Branch WHERE b_id = :b_id', { b_id: cleanBid });
+            if (!brCheck.rows || brCheck.rows.length === 0) {
+                return res.status(400).json({ success: false, error: `Branch with ID ${cleanBid} does not exist` });
+            }
+        }
+
+        let cleanStatus = curEmp[1] || 'ACTIVE';
+        if (status !== undefined && status !== null && String(status).trim() !== '') {
+            cleanStatus = String(status).trim().toUpperCase();
+            if (!['ACTIVE', 'INACTIVE'].includes(cleanStatus)) {
+                return res.status(400).json({ success: false, error: 'Employee status must be ACTIVE or INACTIVE' });
+            }
+        }
+
+        await connection.execute(
+            `UPDATE Employee SET
+                first_name = :first_name,
+                last_name = :last_name,
+                salary = :salary,
+                hire_date = CASE WHEN :hire_date IS NOT NULL THEN TO_DATE(:hire_date, 'YYYY-MM-DD') ELSE hire_date END,
+                b_id = :b_id,
+                status = :status
+            WHERE emp_id = :emp_id`,
+            {
+                first_name: cleanFirst,
+                last_name: cleanLast,
+                salary: cleanSalary,
+                hire_date: cleanHireDate,
+                b_id: cleanBid,
+                status: cleanStatus,
+                emp_id
+            },
+            { autoCommit: true }
+        );
+
+        res.json({
+            success: true,
+            message: `Employee #${emp_id} (${cleanFirst}) updated successfully`,
+            data: {
+                emp_id,
+                first_name: cleanFirst,
+                last_name: cleanLast,
+                salary: cleanSalary,
+                hire_date: cleanHireDate,
+                b_id: cleanBid,
+                status: cleanStatus
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/employees/:emp_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 8. NOMINEES ---
+app.get('/api/nominees/:n_id', async (req, res) => {
+    let connection;
+    try {
+        const n_id = Number(req.params.n_id);
+        if (!n_id || isNaN(n_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Nominee ID is required' });
+        }
+        connection = await getConnection();
+        const result = await connection.execute(
+            'SELECT n_id, first_name, last_name, relationship, TO_CHAR(dob, \'YYYY-MM-DD\') AS dob, cid, acc_id FROM Nominee WHERE n_id = :n_id',
+            { n_id }
+        );
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Nominee #${n_id} not found` });
+        }
+        const r = result.rows[0];
+        res.json({
+            success: true,
+            data: {
+                n_id: r[0],
+                first_name: r[1],
+                last_name: r[2],
+                relationship: r[3],
+                dob: r[4],
+                cid: r[5],
+                acc_id: r[6]
+            }
+        });
+    } catch (error) {
+        console.error('Error in GET /api/nominees/:n_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+app.put('/api/nominees/:n_id', async (req, res) => {
+    let connection;
+    try {
+        const n_id = Number(req.params.n_id);
+        if (!n_id || isNaN(n_id)) {
+            return res.status(400).json({ success: false, error: 'A valid numeric Nominee ID is required' });
+        }
+        const { first_name, last_name, relationship, dob, cid, acc_id } = req.body;
+
+        if (!first_name || !first_name.trim()) {
+            return res.status(400).json({ success: false, error: 'First name is required' });
+        }
+        const cleanFirst = first_name.trim();
+        const cleanLast = last_name && last_name.trim() ? last_name.trim() : null;
+        const cleanRel = relationship && relationship.trim() ? relationship.trim() : null;
+
+        let cleanDob = null;
+        if (dob && String(dob).trim()) {
+            const dStr = String(dob).trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dStr) || isNaN(Date.parse(dStr))) {
+                return res.status(400).json({ success: false, error: 'Date of birth must be in YYYY-MM-DD format' });
+            }
+            cleanDob = dStr;
+        }
+
+        connection = await getConnection();
+
+        const nomCheck = await connection.execute(
+            'SELECT n_id, first_name, last_name, relationship, TO_CHAR(dob, \'YYYY-MM-DD\'), cid, acc_id FROM Nominee WHERE n_id = :n_id',
+            { n_id }
+        );
+        if (!nomCheck.rows || nomCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Nominee #${n_id} not found` });
+        }
+        const curNom = nomCheck.rows[0];
+        const oldCid = curNom[5];
+        const oldAccId = curNom[6];
+
+        let cleanCid = oldCid;
+        if (cid !== undefined && cid !== null && String(cid).trim() !== '') {
+            cleanCid = Number(cid);
+            if (isNaN(cleanCid)) {
+                return res.status(400).json({ success: false, error: 'Customer ID must be a valid number' });
+            }
+            const custCheck = await connection.execute('SELECT cid FROM Customer WHERE cid = :cid', { cid: cleanCid });
+            if (!custCheck.rows || custCheck.rows.length === 0) {
+                return res.status(400).json({ success: false, error: `Customer with ID ${cleanCid} does not exist` });
+            }
+        }
+
+        let cleanAccId = oldAccId;
+        if (acc_id !== undefined && acc_id !== null && String(acc_id).trim() !== '') {
+            cleanAccId = Number(acc_id);
+            if (isNaN(cleanAccId)) {
+                return res.status(400).json({ success: false, error: 'Account ID must be a valid number' });
+            }
+            const accCheck = await connection.execute('SELECT acc_id FROM Account WHERE acc_id = :acc_id', { acc_id: cleanAccId });
+            if (!accCheck.rows || accCheck.rows.length === 0) {
+                return res.status(400).json({ success: false, error: `Account with ID ${cleanAccId} does not exist` });
+            }
+        }
+
+        await connection.execute(
+            `UPDATE Nominee SET
+                first_name = :first_name,
+                last_name = :last_name,
+                relationship = :relationship,
+                dob = CASE WHEN :dob IS NOT NULL THEN TO_DATE(:dob, 'YYYY-MM-DD') ELSE NULL END,
+                cid = :cid,
+                acc_id = :acc_id
+            WHERE n_id = :n_id`,
+            {
+                first_name: cleanFirst,
+                last_name: cleanLast,
+                relationship: cleanRel,
+                dob: cleanDob,
+                cid: cleanCid,
+                acc_id: cleanAccId,
+                n_id
+            }
+        );
+
+        if (cleanCid !== oldCid || cleanAccId !== oldAccId) {
+            await connection.execute(
+                'UPDATE Owns SET cid = :new_cid, acc_id = :new_acc_id WHERE n_id = :n_id',
+                { new_cid: cleanCid, new_acc_id: cleanAccId, n_id }
+            );
+        }
+
+        await connection.commit();
+
+        res.json({
+            success: true,
+            message: `Nominee #${n_id} (${cleanFirst}) updated successfully`,
+            data: {
+                n_id,
+                first_name: cleanFirst,
+                last_name: cleanLast,
+                relationship: cleanRel,
+                dob: cleanDob,
+                cid: cleanCid,
+                acc_id: cleanAccId
+            }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/nominees/:n_id:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 9. CUSTOMER PHONE NUMBERS ---
+app.put('/api/customers/:cid/phones/:phone', async (req, res) => {
+    let connection;
+    try {
+        const cid = Number(req.params.cid);
+        const oldPhone = String(req.params.phone).trim();
+        const { phone: newPhone } = req.body;
+
+        if (!cid || isNaN(cid)) {
+            return res.status(400).json({ success: false, error: 'A valid Customer ID is required' });
+        }
+        if (!oldPhone) {
+            return res.status(400).json({ success: false, error: 'Current phone number is required' });
+        }
+        if (!newPhone || !String(newPhone).trim()) {
+            return res.status(400).json({ success: false, error: 'New phone number is required' });
+        }
+        const cleanNewPhone = String(newPhone).trim();
+        if (cleanNewPhone.length < 5 || cleanNewPhone.length > 15) {
+            return res.status(400).json({ success: false, error: 'Phone number must be between 5 and 15 digits' });
+        }
+
+        connection = await getConnection();
+
+        const phoneCheck = await connection.execute(
+            'SELECT phone FROM Customer_Phone WHERE cid = :cid AND phone = :old_phone',
+            { cid, old_phone: oldPhone }
+        );
+        if (!phoneCheck.rows || phoneCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Phone number ${oldPhone} not found for Customer #${cid}` });
+        }
+
+        if (cleanNewPhone !== oldPhone) {
+            const dupCheck = await connection.execute(
+                'SELECT phone FROM Customer_Phone WHERE cid = :cid AND phone = :new_phone',
+                { cid, new_phone: cleanNewPhone }
+            );
+            if (dupCheck.rows && dupCheck.rows.length > 0) {
+                return res.status(400).json({ success: false, error: `Phone number ${cleanNewPhone} is already registered for Customer #${cid}` });
+            }
+        }
+
+        await connection.execute(
+            'UPDATE Customer_Phone SET phone = :new_phone WHERE cid = :cid AND phone = :old_phone',
+            { new_phone: cleanNewPhone, cid, old_phone: oldPhone },
+            { autoCommit: true }
+        );
+
+        res.json({
+            success: true,
+            message: 'Phone number updated successfully',
+            data: { cid, old_phone: oldPhone, phone: cleanNewPhone }
+        });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/customers/:cid/phones/:phone:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 10. OWNS RELATIONSHIPS ---
+app.put('/api/owns', async (req, res) => {
+    let connection;
+    try {
+        const { old_cid, old_acc_id, old_n_id, cid, acc_id, n_id } = req.body;
+        if (!old_cid || !old_acc_id || !old_n_id || !cid || !acc_id || !n_id) {
+            return res.status(400).json({ success: false, error: 'old_cid, old_acc_id, old_n_id, cid, acc_id, and n_id are required' });
+        }
+        connection = await getConnection();
+
+        const [cCheck, aCheck, nCheck] = await Promise.all([
+            connection.execute('SELECT cid FROM Customer WHERE cid = :cid', { cid: Number(cid) }),
+            connection.execute('SELECT acc_id FROM Account WHERE acc_id = :acc_id', { acc_id: Number(acc_id) }),
+            connection.execute('SELECT n_id FROM Nominee WHERE n_id = :n_id', { n_id: Number(n_id) })
+        ]);
+
+        if (!cCheck.rows || !cCheck.rows.length) return res.status(400).json({ success: false, error: `Customer #${cid} does not exist` });
+        if (!aCheck.rows || !aCheck.rows.length) return res.status(400).json({ success: false, error: `Account #${acc_id} does not exist` });
+        if (!nCheck.rows || !nCheck.rows.length) return res.status(400).json({ success: false, error: `Nominee #${n_id} does not exist` });
+
+        await connection.execute(
+            `UPDATE Owns SET cid = :cid, acc_id = :acc_id, n_id = :n_id
+             WHERE cid = :old_cid AND acc_id = :old_acc_id AND n_id = :old_n_id`,
+            {
+                cid: Number(cid),
+                acc_id: Number(acc_id),
+                n_id: Number(n_id),
+                old_cid: Number(old_cid),
+                old_acc_id: Number(old_acc_id),
+                old_n_id: Number(old_n_id)
+            },
+            { autoCommit: true }
+        );
+
+        res.json({ success: true, message: 'Ownership relationship updated successfully' });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/owns:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// --- 11. RESPONSIBLE_FOR RELATIONSHIPS ---
+app.put('/api/responsible-for', async (req, res) => {
+    let connection;
+    try {
+        const { old_emp_id, old_t_id, old_l_id, old_b_id, emp_id, t_id, l_id, b_id } = req.body;
+        if (!old_emp_id || !old_t_id || !old_l_id || !old_b_id || !emp_id || !t_id || !l_id || !b_id) {
+            return res.status(400).json({ success: false, error: 'All old and new foreign key attributes are required' });
+        }
+        connection = await getConnection();
+
+        const [eCheck, tCheck, lCheck, bCheck] = await Promise.all([
+            connection.execute('SELECT emp_id FROM Employee WHERE emp_id = :emp_id', { emp_id: Number(emp_id) }),
+            connection.execute('SELECT t_id FROM "TRANSACTION" WHERE t_id = :t_id', { t_id: Number(t_id) }),
+            connection.execute('SELECT l_id FROM Loan WHERE l_id = :l_id', { l_id: Number(l_id) }),
+            connection.execute('SELECT b_id FROM Branch WHERE b_id = :b_id', { b_id: Number(b_id) })
+        ]);
+
+        if (!eCheck.rows || !eCheck.rows.length) return res.status(400).json({ success: false, error: `Employee #${emp_id} does not exist` });
+        if (!tCheck.rows || !tCheck.rows.length) return res.status(400).json({ success: false, error: `Transaction #${t_id} does not exist` });
+        if (!lCheck.rows || !lCheck.rows.length) return res.status(400).json({ success: false, error: `Loan #${l_id} does not exist` });
+        if (!bCheck.rows || !bCheck.rows.length) return res.status(400).json({ success: false, error: `Branch #${b_id} does not exist` });
+
+        await connection.execute(
+            `UPDATE Responsible_For SET emp_id = :emp_id, t_id = :t_id, l_id = :l_id, b_id = :b_id
+             WHERE emp_id = :old_emp_id AND t_id = :old_t_id AND l_id = :old_l_id AND b_id = :old_b_id`,
+            {
+                emp_id: Number(emp_id),
+                t_id: Number(t_id),
+                l_id: Number(l_id),
+                b_id: Number(b_id),
+                old_emp_id: Number(old_emp_id),
+                old_t_id: Number(old_t_id),
+                old_l_id: Number(old_l_id),
+                old_b_id: Number(old_b_id)
+            },
+            { autoCommit: true }
+        );
+
+        res.json({ success: true, message: 'Responsibility relationship updated successfully' });
+    } catch (error) {
+        if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+        }
+        console.error('Error in PUT /api/responsible-for:', error.message);
+        res.status(500).json({ success: false, error: formatOracleError(error) });
+    } finally {
+        if (connection) {
+            try { await connection.close(); } catch (_) {}
+        }
+    }
+});
+
+// ============================================================================
 // SAFE DELETE, CLOSE & DEACTIVATE ENDPOINTS
 // ============================================================================
 
