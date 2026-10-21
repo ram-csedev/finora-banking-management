@@ -55,9 +55,7 @@ A relational database-based banking and loan management system developed as an a
 - [Deployment Architecture](#deployment-architecture)
 - [Database Verification](#database-verification)
 - [Security Considerations](#security-considerations)
-- [Future Improvements](#future-improvements)
 - [Academic Purpose](#academic-purpose)
-- [License & Contributors](#license--contributors)
 
 ---
 
@@ -800,16 +798,6 @@ This project was built for **academic and educational purposes**. While it imple
 
 ---
 
-## Future Improvements
-
-- [ ] **Role-Based Authentication:** Implement customer and teller logins with JWT tokens and password hashing.
-- [ ] **Inter-Account Transfers UI:** Provide a frontend interface for the existing `transfer_money` PL/SQL procedure.
-- [ ] **Statement Export:** Add PDF/CSV download capability for account transaction statements.
-- [ ] **Automated CI/CD:** Set up GitHub Actions for automated static analysis and API testing.
-- [ ] **Audit Logs:** Add a dedicated security auditing table to log administrator actions and failed sign-in attempts.
-
----
-
 ## Academic Purpose
 
 This project was developed as an academic Database Management Systems (DBMS) project to demonstrate:
@@ -820,13 +808,3 @@ This project was developed as an academic Database Management Systems (DBMS) pro
 - Real-world cloud deployment with decoupled containerized databases and web services.
 
 ---
-
-## License & Contributors
-
-### Contributors
-- **Frontend:** MADHUMITHA VINOD
-- **Backend & Database:** PRIYANSHI CHANDAK
-- **Connectivity & Hosting:** RAM N
-
-### License
-This project was developed for academic and educational purposes.
