@@ -1,170 +1,87 @@
-\# Finora — Banking Management Systems
+# Finora — Banking Management Systems
 
+A collection of two database-driven banking management system projects developed as part of Database Management Systems coursework. Together, these projects demonstrate relational database design, SQL, application development, data integrity, and frontend-backend integration.
 
+## Projects
 
-A collection of two database-driven banking management system projects developed as part of Database Management Systems coursework. The projects demonstrate relational database design, SQL, application development, data integrity, and the integration of frontend and backend components.
+### DA2 — Banking Management System
 
-
-
-\## Projects
-
-
-
-\### DA2 — Banking Management System
-
-
-
-\*\*Location:\*\* \[`DBMS-DA-2/`](DBMS-DA-2/)
-
-
+**Project directory:** [`DBMS-DA-2/`](DBMS-DA-2/)
 
 The original banking management system, featuring a relational database, SQL scripts, and a web-based interface.
 
+**Components**
 
+- **Backend:** Server-side application and database connectivity.
+- **Database:** SQL schemas, setup scripts, and database verification.
+- **Frontend:** Web interface built with HTML, CSS, and JavaScript.
+- **Scratch:** Development and testing scripts.
 
-\*\*Project components\*\*
+See the [DA2 README](DBMS-DA-2/README.md) for detailed documentation and setup instructions.
 
-\- `backend/` — server-side application and database connectivity
+### DA3 — Cloud Banking and Relational Management System
 
-\- `database/` — SQL schema, setup scripts, and database verification
-
-\- `frontend/` — web interface built with HTML, CSS, and JavaScript
-
-\- `scratch/` — development and testing scripts
-
-
-
-See the \[DA2 README](DBMS-DA-2/README.md) for project-specific documentation and setup instructions.
-
-
-
-\### DA3 — Cloud Banking and Relational Management System
-
-
-
-\*\*Location:\*\* \[`DBMS-DA-3/`](DBMS-DA-3/)
-
-
+**Project directory:** [`DBMS-DA-3/`](DBMS-DA-3/)
 
 An extended banking management system using CockroachDB Cloud, a REST API, and a modern web interface.
 
+**Key features**
 
+- Customer, employee, branch, account, loan, and credit-card management.
+- Banking operations and transaction handling.
+- Relational constraints and database integrity.
+- Record editing, lifecycle management, and deletion safeguards.
+- Database metadata exploration and schema visualization.
+- SQL workbench and educational distributed-database simulations.
 
-\*\*Key features\*\*
+See the [DA3 README](DBMS-DA-3/README.md) for the architecture, technology stack, environment setup, API documentation, and deployment instructions.
 
-\- Customer, employee, branch, account, loan, and credit-card management
-
-\- Banking operations and transaction handling
-
-\- Relational constraints and database integrity
-
-\- Record editing, lifecycle management, and deletion safeguards
-
-\- Database metadata exploration and schema visualization
-
-\- SQL workbench and educational distributed-database simulations
-
-
-
-See the \[DA3 README](DBMS-DA-3/README.md) for the architecture, technology stack, environment setup, API documentation, and deployment instructions.
-
-
-
-\## Technologies
-
-
+## Technologies
 
 The projects use technologies appropriate to their individual implementations, including:
 
-
-
-\- \*\*Database:\*\* Relational SQL databases; CockroachDB Cloud for DA3
-
-\- \*\*Backend:\*\* JavaScript and Node.js-based server components
-
-\- \*\*Frontend:\*\* HTML, CSS, JavaScript; React and TypeScript for DA3
-
-\- \*\*Database concepts:\*\* Relationships, primary and foreign keys, constraints, transactions, and data integrity
-
-\- \*\*Version control:\*\* Git and GitHub
-
-
+- **Databases:** Relational SQL databases, including CockroachDB Cloud for DA3.
+- **Backend:** Node.js and JavaScript-based server components.
+- **Frontend:** HTML, CSS, JavaScript, React, and TypeScript.
+- **Database concepts:** Relationships, primary and foreign keys, constraints, transactions, and data integrity.
+- **Version control:** Git and GitHub.
 
 Refer to each project's README for its exact dependencies and requirements.
 
-
-
-\## Repository Structure
-
-
+## Repository Structure
 
 ```text
-
 finora-banking-management/
-
 ├── README.md
-
 ├── DBMS-DA-2/
-
 │   ├── README.md
-
 │   ├── backend/
-
 │   ├── database/
-
 │   ├── frontend/
-
 │   └── scratch/
-
 └── DBMS-DA-3/
-
-&#x20;   ├── README.md
-
-&#x20;   ├── backend/
-
-&#x20;   ├── frontend/
-
-&#x20;   └── ...
-
+    ├── README.md
+    ├── backend/
+    ├── frontend/
+    └── ...
 ```
 
+*The structure above is illustrative. See the project directories for their actual contents.*
 
+## Getting Started
 
-The structure above is illustrative; see the project directories for their actual contents.
+1. Clone this repository.
+2. Choose `DBMS-DA-2/` or `DBMS-DA-3/`, depending on which project you want to run.
+3. Read that project's README.
+4. Configure the required environment variables and database connection.
+5. Follow the project-specific instructions to install dependencies and start the application.
 
+**Security:** Never commit database passwords, API keys, secret `.env` files, or private certificates.
 
+## Academic Purpose
 
-\## Getting Started
+These projects explore database design and implementation through a banking management use case, covering data modeling, relational integrity, application integration, and database operations.
 
+---
 
-
-1\. Clone this repository.
-
-2\. Open `DBMS-DA-2/` or `DBMS-DA-3/`, depending on which project you want to run.
-
-3\. Read that project's README before installing dependencies or configuring the database.
-
-4\. Configure environment variables and database connections using the project's setup instructions.
-
-5\. Run the relevant backend and frontend using the documented commands.
-
-
-
-\*\*Important:\*\* Never commit database passwords, API keys, `.env` files containing secrets, or private certificates.
-
-
-
-\## Academic Purpose
-
-
-
-These projects explore database design and implementation through a banking management use case, including data modeling, relational integrity, application integration, and database operations.
-
-
-
-\---
-
-
-
-For detailed setup instructions, architecture, features, and dependencies, see the README inside each project directory.
-
+For detailed architecture, features, dependencies, and setup instructions, see the README inside each project directory.
