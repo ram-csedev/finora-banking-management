@@ -4,12 +4,6 @@ A relational database-based banking and loan management system developed as an a
 
 ---
 
-### 🌐 Live Demo
-
-**[Visit Finora →](https://finora-banking-management.onrender.com/)**
-
----
-
 ### Project Team
 
 - **Frontend Development:** MADHUMITHA VINOD - 25BCE1284
