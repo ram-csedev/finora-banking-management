@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: #05070c;
+    color: #e2e8f0;
+    overflow-x: hidden;
+  }
+
+  /* Custom Neon Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #080b11;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #06b6d4;
+  }
+}
+
+@layer utilities {
+  .bg-glass {
+    background: rgba(14, 20, 32, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  
+  .border-glow-cyan {
+    border-color: rgba(6, 182, 212, 0.4);
+    box-shadow: 0 0 15px -3px rgba(6, 182, 212, 0.25);
+  }
+
+  .border-glow-emerald {
+    border-color: rgba(16, 185, 129, 0.4);
+    box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.25);
+  }
+
+  .text-glow-cyan {
+    text-shadow: 0 0 12px rgba(6, 182, 212, 0.5);
+  }
+
+  .text-glow-emerald {
+    text-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+  }
+
+  .tech-grid-bg {
+    background-size: 24px 24px;
+    background-image: 
+      linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  }
+}
