@@ -109,11 +109,12 @@ async function handleUpdate(entityName, req, res, next) {
 async function handleDelete(entityName, req, res, next) {
   try {
     const ipAddress = req.ip || req.headers['x-forwarded-for'];
+    const { empId } = req.body || {};
     const result = await entityService.deleteEntity(
       entityName,
       req.params.id,
       req.params.subId,
-      { ipAddress }
+      { empId, ipAddress }
     );
     res.json({ success: true, ...result });
   } catch (err) {

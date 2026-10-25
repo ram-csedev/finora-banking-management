@@ -334,6 +334,28 @@ async function updateEntity(entityName, id, data, { subId = null, empId = null, 
  */
 async function deleteEntity(entityName, id, subId = null, { empId = null, ipAddress = null } = {}) {
   const deletionService = require('./deletionService');
+  const preview = await deletionService.getDeletePreview(entityName, id, subId);
+  if (preview.isBlocked) {
+    throw new AppError(`Deletion blocked: ${preview.blockReasons.join(' ')}`, 400);
+  }
+  if (preview.hasProtectedHistory && entityName === 'customer') {
+    throw new AppError(
+      `Deletion of customer #${id} requires confirmation: record has active account/loan relationships. Use the permanent deletion confirmation endpoint.`,
+      400
+    );
+  }
+  if (preview.hasProtectedHistory && entityName === 'account') {
+    throw new AppError(
+      `Deletion of account #${id} requires confirmation: record has positive balance & transaction history. Use the permanent deletion confirmation endpoint.`,
+      400
+    );
+  }
+  if (preview.hasProtectedHistory && entityName === 'branch') {
+    throw new AppError(
+      `Deletion of branch #${id} requires confirmation: record has active employee or account dependencies. Use the permanent deletion confirmation endpoint.`,
+      400
+    );
+  }
   return await deletionService.confirmPermanentDelete(entityName, id, subId, { empId, ipAddress });
 }
 

@@ -314,6 +314,9 @@ export interface DeletePreviewData {
   target: any;
   isBlocked: boolean;
   blockReasons: string[];
+  hasProtectedHistory?: boolean;
+  consequenceWarning?: string | null;
+  financialProtectionReason?: string | null;
   impact: {
     recordsToDelete: ImpactRecord[];
     relationshipsToRemove: ImpactRecord[];

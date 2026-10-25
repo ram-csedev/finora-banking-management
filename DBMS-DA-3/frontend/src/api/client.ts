@@ -464,11 +464,14 @@ export const api = {
     return this.get<DeletePreviewResponse>(path);
   },
 
-  async confirmPermanentDelete(entity: string, id: string, subId?: string, empId?: string): Promise<{ success: boolean; message: string; deleted?: any }> {
+  async confirmPermanentDelete(entity: string, id: string, subId?: string, options?: { empId?: string } | string): Promise<{ success: boolean; message: string; deleted?: any }> {
+    const opts = typeof options === 'string' ? { empId: options } : options || {};
     const path = subId
       ? `/entities/${entity}/${id}/${subId}/delete-confirm`
       : `/entities/${entity}/${id}/delete-confirm`;
-    return this.post<{ success: boolean; message: string; deleted?: any }>(path, { empId });
+    return this.post<{ success: boolean; message: string; deleted?: any }>(path, {
+      empId: opts.empId
+    });
   },
 
   async executeLifecycleAction(entity: string, id: string, action: string, reason?: string, empId?: string): Promise<LifecycleActionResult> {

@@ -213,7 +213,7 @@ export const BranchesPage: React.FC = () => {
       setStatusMessage({ type: 'success', text: `Branch #${selectedBranch.b_id} deleted successfully.` });
       fetchBranches();
     } catch (err: any) {
-      setDeleteError(err.message || 'Deletion rejected. Branch has active staff or accounts assigned.');
+      setDeleteError(err.message || 'Deletion failed. Branch could not be deleted.');
     } finally {
       setIsDeleting(false);
     }

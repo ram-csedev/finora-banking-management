@@ -108,7 +108,6 @@ async function runAllTests() {
 
   // --------------------------------------------------------------------------
   // Scenario 4: Preview with multiple dependent records
-  // --------------------------------------------------------------------------
   console.log('\n--- Scenario 4: Preview with multiple dependent records ---');
   try {
     // Find customer with accounts, loans or creditcards
@@ -119,9 +118,10 @@ async function runAllTests() {
     );
     if (custDep.rows.length > 0) {
       const p = await deletionService.getDeletePreview('customer', custDep.rows[0].cid);
-      assert(p.isBlocked === true, 'Customer with active account relationships is blocked');
-      assert(p.blockReasons.length > 0, `Block reason provided: "${p.blockReasons[0]}"`);
-      assert(p.allowedActions.find(a => a.action === 'delete_permanent').enabled === false, 'Delete Permanently button disabled');
+      assert(p.isBlocked === false, 'Customer with active account relationships has deletion permitted');
+      assert(p.hasProtectedHistory === true, 'Customer with dependencies has hasProtectedHistory = true');
+      assert(Boolean(p.consequenceWarning), 'Consequence warning is provided');
+      assert(p.allowedActions.find(a => a.action === 'delete_permanent').enabled === true, 'Delete Permanently button enabled');
     } else {
       console.log('  ⚠️ Skipping Scenario 4: No customer with account dependencies found');
     }
@@ -347,9 +347,12 @@ async function runAllTests() {
     );
     const paymentId = payRes.rows[0].payment_id;
 
-    // Verify deletion is blocked because payment exists
+    // Verify deletion preview allows permanent deletion while highlighting protected repayment history
     const p = await deletionService.getDeletePreview('loan', lId);
-    assert(p.isBlocked === true, 'Loan deletion is blocked due to repayment installments');
+    assert(p.isBlocked === false, 'Loan deletion is permitted with repayment installments');
+    assert(p.hasProtectedHistory === true, 'Loan has protected repayment history');
+    assert(Boolean(p.consequenceWarning), 'Loan consequence warning is provided');
+    assert(p.allowedActions.find(a => a.action === 'delete_permanent').enabled === true, 'Delete Permanently button enabled');
 
     // Settle loan
     const setRes = await deletionService.executeLifecycleAction('loan', lId, 'settle_loan');
@@ -505,21 +508,48 @@ async function runAllTests() {
   }
 
   // --------------------------------------------------------------------------
-  // Scenario 16: Foreign-key violations and rollback
+  // Scenario 16: Foreign-key constraint protection on direct SQL vs service cascade
   // --------------------------------------------------------------------------
-  console.log('\n--- Scenario 16: Foreign-key violations and rollback ---');
+  console.log('\n--- Scenario 16: Foreign-key constraint protection and atomic rollback ---');
   try {
-    // If a deletion encounters a constraint violation, the transaction rolls back cleanly
-    const existingBranch = await db.query('SELECT b_id FROM branch WHERE b_id IN (SELECT b_id FROM employee) LIMIT 1');
-    if (existingBranch.rows.length > 0) {
-      const bId = existingBranch.rows[0].b_id;
-      try {
-        await deletionService.confirmPermanentDelete('branch', bId);
-        assert(false, 'Deleting branch with attached employees should fail');
-      } catch (e) {
-        assert(e.statusCode === 400 || e.statusCode === 409, 'Branch deletion blocked by dependency safeguards');
-      }
+    // Create an isolated branch with an employee to test direct SQL FK protection
+    const ifscFk = 'FKBR' + Math.floor(1000000 + Math.random() * 9000000);
+    const bRes = await db.query(
+      `INSERT INTO branch (branch_name, city, state, pincode, ifsc, contact, status)
+       VALUES ('FK Test Branch', 'City', 'State', '110001', $1, '9999999999', 'ACTIVE')
+       RETURNING b_id`,
+      [ifscFk]
+    );
+    const fkBranchId = bRes.rows[0].b_id;
+
+    const empRes = await db.query(
+      `INSERT INTO employee (first_name, last_name, salary, hire_date, b_id, email, status)
+       VALUES ('Direct', 'Worker', 45000, CURRENT_DATE, $1, 'fkworker@test.com', 'ACTIVE')
+       RETURNING emp_id`,
+      [fkBranchId]
+    );
+    const fkEmpId = empRes.rows[0].emp_id;
+
+    // Direct uncascaded SQL deletion must fail with foreign-key constraint violation (23503)
+    let directSqlFailed = false;
+    try {
+      await db.query('DELETE FROM branch WHERE b_id = $1', [fkBranchId]);
+    } catch (sqlErr) {
+      directSqlFailed = true;
+      assert(sqlErr.code === '23503', 'Raw SQL deletion properly blocked by foreign key constraint (23503)');
     }
+    assert(directSqlFailed, 'Raw uncoordinated DELETE FROM branch was rejected');
+
+    // Deletion service properly cascades and deletes the branch and attached employee
+    const delRes = await deletionService.confirmPermanentDelete('branch', fkBranchId);
+    assert(delRes.success === true, 'Service cascades branch deletion cleanly');
+    assert((delRes.deleted || delRes.deletedRecord)?.cascaded?.employeesDeleted >= 1, 'Cascaded employee count reported');
+
+    // Verify employee and branch are both gone
+    const checkB = await db.query('SELECT 1 FROM branch WHERE b_id = $1', [fkBranchId]);
+    const checkE = await db.query('SELECT 1 FROM employee WHERE emp_id = $1', [fkEmpId]);
+    assert(checkB.rows.length === 0, 'Branch successfully deleted');
+    assert(checkE.rows.length === 0, 'Employee successfully deleted');
   } catch (e) {
     assert(false, `Scenario 16 failed: ${e.message}`);
   }
@@ -529,33 +559,37 @@ async function runAllTests() {
   // --------------------------------------------------------------------------
   console.log('\n--- Scenario 17: Concurrent changes between preview and confirmation ---');
   try {
-    const branchRes = await db.query('SELECT b_id FROM branch LIMIT 1');
-    const bId = branchRes.rows[0].b_id;
-
-    // Create an empty account
-    const acc = await db.query(
-      `INSERT INTO account (b_id, balance, status, acc_type)
-       VALUES ($1, 0, 'ACTIVE', 'SAVINGS') RETURNING acc_id`,
-      [bId]
+    // Create an unattached branch
+    const bRes = await db.query(
+      `INSERT INTO branch (branch_name, city, state, pincode, ifsc, contact, status)
+       VALUES ('Concurrent Branch', 'Test City', 'State', '110001', 'CONC' || floor(random()*9000000)::text, '9999999999', 'ACTIVE')
+       RETURNING b_id`
     );
-    const accId = acc.rows[0].acc_id;
+    const tempBId = bRes.rows[0].b_id;
 
-    // Preview sees 0 balance (would allow delete)
-    const p = await deletionService.getDeletePreview('account', accId);
-    assert(p.isBlocked === false, 'Initial preview is unblocked');
+    // Preview sees 0 staff and 0 accounts
+    const p = await deletionService.getDeletePreview('branch', tempBId);
+    assert(p.isBlocked === false, 'Initial branch preview is unblocked');
 
-    // Simulate concurrent update: someone deposits money before confirm is submitted
-    await db.query('UPDATE account SET balance = 500 WHERE acc_id = $1', [accId]);
+    // Simulate concurrent update: someone assigns a staff member before confirm is submitted
+    const empRes = await db.query(
+      `INSERT INTO employee (first_name, last_name, salary, hire_date, b_id, email, status)
+       VALUES ('Branch', 'Worker', 45000, CURRENT_DATE, $1, 'worker@test.com', 'ACTIVE')
+       RETURNING emp_id`,
+      [tempBId]
+    );
+    const tempEmpId = empRes.rows[0].emp_id;
 
-    // Now confirm is submitted: revalidation must catch this change and abort!
-    try {
-      await deletionService.confirmPermanentDelete('account', accId);
-      assert(false, 'Should abort when concurrent balance change occurred');
-    } catch (e) {
-      assert(e.statusCode === 400 || e.statusCode === 409, 'Revalidation caught concurrent balance change and aborted');
-    }
+    // Now confirm is submitted: cascade automatically identifies and deletes newly attached employee
+    const delRes = await deletionService.confirmPermanentDelete('branch', tempBId);
+    assert(delRes.success === true, 'Deletion service successfully handles concurrent dependency additions');
+    assert((delRes.deleted || delRes.deletedRecord)?.cascaded?.employeesDeleted === 1, 'Cascaded count reflects concurrently added staff member');
 
-    await db.query('DELETE FROM account WHERE acc_id = $1', [accId]);
+    // Clean up verification
+    const checkEmp = await db.query('SELECT 1 FROM employee WHERE emp_id = $1', [tempEmpId]);
+    const checkBranch = await db.query('SELECT 1 FROM branch WHERE b_id = $1', [tempBId]);
+    assert(checkEmp.rows.length === 0, 'Concurrently added employee was cascaded');
+    assert(checkBranch.rows.length === 0, 'Branch was deleted');
   } catch (e) {
     assert(false, `Scenario 17 failed: ${e.message}`);
   }
@@ -641,6 +675,121 @@ async function runAllTests() {
     }
   } catch (e) {
     assert(false, `Scenario 20 failed: ${e.message}`);
+  }
+
+  
+  // --------------------------------------------------------------------------
+  // Scenario 21: Comprehensive Cascading Permanent Deletion (Accounts & Customers with Financial History)
+  // --------------------------------------------------------------------------
+  console.log('\n--- Scenario 21: Comprehensive Cascading Permanent Deletion (Accounts & Customers with Financial History) ---');
+  try {
+    const branchRes = await db.query('SELECT b_id FROM branch LIMIT 1');
+    const bId = branchRes.rows[0].b_id;
+
+    // 1. Create a customer, account, nominee, and deposit transactions
+    const cRes = await db.query(
+      `INSERT INTO customer (pan, first_name, last_name, email)
+       VALUES ('CASC' || floor(random()*90000)::text, 'Cascade', 'Tester', 'casc@test.com') RETURNING cid`
+    );
+    const testCid = cRes.rows[0].cid;
+
+    const accRes = await db.query(
+      `INSERT INTO account (b_id, balance, status, acc_type)
+       VALUES ($1, 25000.00, 'ACTIVE', 'SAVINGS') RETURNING acc_id`,
+      [bId]
+    );
+    const testAccId = accRes.rows[0].acc_id;
+
+    await db.query(
+      `INSERT INTO account_holder (acc_id, cid, ownership_role, is_primary) VALUES ($1, $2, 'PRIMARY', true)`,
+      [testAccId, testCid]
+    );
+
+    await db.query(
+      `INSERT INTO nominee (acc_id, first_name, last_name, relationship) VALUES ($1, 'Jane', 'Tester', 'SPOUSE')`,
+      [testAccId]
+    );
+
+    await db.query(
+      `INSERT INTO "transaction" (acc_id, type, amount, mode, status, description)
+       VALUES ($1, 'DEPOSIT', 25000.00, 'ONLINE', 'SUCCESS', 'Seed Deposit')`,
+      [testAccId]
+    );
+
+    // 2. Test Account Preview with protected history
+    const accPreview = await deletionService.getDeletePreview('account', testAccId);
+    assert(accPreview.isBlocked === false, 'Account with ledger history has deletion permitted');
+    assert(accPreview.hasProtectedHistory === true, 'Account has hasProtectedHistory = true');
+    assert(Boolean(accPreview.consequenceWarning), 'Consequence warning provided for account');
+    assert(accPreview.allowedActions.find(a => a.action === 'delete_permanent').enabled === true, 'Delete Permanently button enabled');
+
+    // 3. Deletion with standard confirmation succeeds directly
+    const accDelRes = await deletionService.confirmPermanentDelete('account', testAccId);
+    assert(accDelRes.success === true, 'Account deletion succeeded');
+
+    // Verify account and its transactions are gone from database
+    const accCheck = await db.query('SELECT 1 FROM account WHERE acc_id = $1', [testAccId]);
+    assert(accCheck.rows.length === 0, 'Account successfully deleted from database');
+    const txCheck = await db.query('SELECT 1 FROM "transaction" WHERE acc_id = $1', [testAccId]);
+    assert(txCheck.rows.length === 0, 'Transactions successfully cascaded and removed');
+
+    // 4. Test Customer with Credit Card and Loan
+    const loanRes = await db.query(
+      `INSERT INTO loan (cid, l_type, amount, interest, term, start_date, status)
+       VALUES ($1, 'HOME', 100000, 8.5, 60, CURRENT_DATE, 'ACTIVE') RETURNING l_id`,
+      [testCid]
+    );
+    const testLId = loanRes.rows[0].l_id;
+
+    await db.query(
+      `INSERT INTO loan_payment (l_id, payment_date, amount, principal_amount, interest_amount, payment_mode, status)
+       VALUES ($1, CURRENT_DATE, 2500, 2000, 500, 'ONLINE', 'SUCCESS')`,
+      [testLId]
+    );
+
+    const testPno = '4532' + Math.floor(100000000000 + Math.random() * 900000000000);
+    await db.query(
+      `INSERT INTO creditcard (pno, cid, type, card_limit, expiry, status)
+       VALUES ($1, $2, 'VISA', 50000, CURRENT_DATE + INTERVAL '3 years', 'ACTIVE')`,
+      [testPno, testCid]
+    );
+
+    // Preview customer
+    const custPreview = await deletionService.getDeletePreview('customer', testCid);
+    assert(custPreview.isBlocked === false, 'Customer with active loan & card has deletion permitted');
+    assert(custPreview.hasProtectedHistory === true, 'Customer has hasProtectedHistory = true');
+    assert(Boolean(custPreview.consequenceWarning), 'Consequence warning provided for customer');
+    assert(custPreview.allowedActions.find(a => a.action === 'delete_permanent').enabled === true, 'Delete Permanently button enabled');
+
+    // Deletion cascades loans, payments, cards, and customer
+    const custDelRes = await deletionService.confirmPermanentDelete('customer', testCid);
+    assert(custDelRes.success === true, 'Customer deletion succeeded');
+
+    const custCheck = await db.query('SELECT 1 FROM customer WHERE cid = $1', [testCid]);
+    assert(custCheck.rows.length === 0, 'Customer successfully deleted from database');
+    const loanCheck = await db.query('SELECT 1 FROM loan WHERE l_id = $1', [testLId]);
+    assert(loanCheck.rows.length === 0, 'Customer loans cascaded and deleted');
+
+    // 5. Test responsible_for deletion preview and execution
+    const empRes = await db.query('SELECT emp_id FROM employee LIMIT 1');
+    const testEmpId = empRes.rows[0].emp_id;
+
+    const dutyRes = await db.query(
+      `INSERT INTO responsible_for (emp_id, b_id, role_type, assigned_date, status)
+       VALUES ($1, $2, 'OPERATIONAL_SUPERVISOR', CURRENT_DATE, 'ACTIVE') RETURNING rf_id`,
+      [testEmpId, bId]
+    );
+    const testRfId = dutyRes.rows[0].rf_id;
+
+    const dutyPreview = await deletionService.getDeletePreview('responsible_for', testRfId);
+    assert(dutyPreview.isBlocked === false, 'responsible_for deletion preview is unblocked');
+
+    const dutyDelRes = await deletionService.confirmPermanentDelete('responsible_for', testRfId);
+    assert(dutyDelRes.success === true, 'responsible_for deleted cleanly');
+    const dutyCheck = await db.query('SELECT 1 FROM responsible_for WHERE rf_id = $1', [testRfId]);
+    assert(dutyCheck.rows.length === 0, 'Duty assignment deleted from database');
+  } catch (e) {
+    assert(false, `Scenario 21 failed: ${e.message}`);
   }
 
   console.log('\n================================================================');

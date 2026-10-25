@@ -36,6 +36,12 @@ const ENTITY_ALIASES = {
   beneficiaries: 'beneficiary',
   beneficiary: 'beneficiary',
   'account-holders': 'account_holder',
+  'responsible-for': 'responsible_for',
+  'responsible_for': 'responsible_for',
+  'responsible-fors': 'responsible_for',
+  'responsible_fors': 'responsible_for',
+  responsibilities: 'responsible_for',
+  responsibility: 'responsible_for',
   account_holder: 'account_holder',
   transactions: 'transaction',
   transaction: 'transaction',
@@ -89,6 +95,8 @@ async function getDeletePreview(entityInput, id, extraParam = null) {
       return await getCustomerPhonePreview(id, extraParam);
     case 'account_holder':
       return await getAccountHolderPreview(id, extraParam);
+    case 'responsible_for':
+      return await getResponsibleForPreview(id);
     default:
       throw new AppError(`Entity '${entity}' is not configured for deletion preview.`, 400);
   }
@@ -125,27 +133,41 @@ async function getAccountPreview(accId, client = null) {
   const txCount = parseInt(dep.tx_count, 10) || 0;
   const beneCount = parseInt(dep.bene_count, 10) || 0;
 
-  const blockReasons = [];
+  const hasProtectedHistory = txCount > 0 || balance > 0;
+  const financialProtectionReasons = [];
   if (txCount > 0) {
-    blockReasons.push(
-      `Account has ${txCount} historical transaction(s). In accordance with banking regulations and CockroachDB referential constraints, financial ledger history cannot be deleted.`
-    );
+    financialProtectionReasons.push(`${txCount} historical ledger transaction(s)`);
   }
   if (balance > 0) {
-    blockReasons.push(
-      `Account has an active balance of ₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. Balance must be withdrawn or transferred to zero before deletion or closure.`
-    );
+    financialProtectionReasons.push(`an active ledger balance of ₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`);
   }
+  const financialProtectionReason = hasProtectedHistory
+    ? `Account has ${financialProtectionReasons.join(' and ')}.`
+    : null;
 
-  const isBlocked = blockReasons.length > 0;
+  const consequenceWarning = hasProtectedHistory
+    ? `Permanently deleting this account will cascade and delete all associated historical ledger transactions (${txCount} transaction${txCount === 1 ? '' : 's'}) and active ledger balance (₹${balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}). External beneficiary links will be severed and nominee registrations will be removed.`
+    : `Permanently deleting this account will remove its record, nominee registrations, and customer ownership links.`;
+
+  const recordsToDelete = [
+    { label: 'Account Record', count: 1, description: 'Primary account record' },
+    { label: 'Nominee Registrations', count: nomCount, description: 'Nominees assigned to this account (CASCADE)' }
+  ];
+  if (txCount > 0) {
+    recordsToDelete.push({
+      label: 'Historical Ledger Transactions',
+      count: txCount,
+      description: 'Historical transactions will be permanently deleted with this account'
+    });
+  }
 
   const allowedActions = [
     {
       action: 'delete_permanent',
       label: 'Delete Permanently',
       variant: 'danger',
-      enabled: !isBlocked,
-      disabledReason: isBlocked ? blockReasons[0] : null
+      enabled: true,
+      disabledReason: null
     },
     {
       action: 'close_account',
@@ -176,13 +198,13 @@ async function getAccountPreview(accId, client = null) {
     entityId: String(accId),
     entityTitle: `Account #${accId} (${acc.acc_type})`,
     target: acc,
-    isBlocked,
-    blockReasons,
+    isBlocked: false,
+    hasProtectedHistory,
+    financialProtectionReason,
+    consequenceWarning,
+    blockReasons: [],
     impact: {
-      recordsToDelete: [
-        { label: 'Account Record', count: 1, description: 'Primary account record' },
-        { label: 'Nominee Registrations', count: nomCount, description: 'Nominees assigned to this account (CASCADE)' }
-      ],
+      recordsToDelete,
       relationshipsToRemove: [
         { label: 'Account Ownerships', count: holderCount, description: 'Customer ownership links (CASCADE)' }
       ],
@@ -190,7 +212,13 @@ async function getAccountPreview(accId, client = null) {
         { label: 'External Beneficiary Links', count: beneCount, description: 'Destination links will be set to NULL; beneficiaries preserved' }
       ],
       protectedFinancialRecords: [
-        { label: 'Ledger Transactions', count: txCount, description: 'Historical ledger transactions (IMMUTABLE)' }
+        {
+          label: 'Ledger Transactions',
+          count: txCount,
+          description: txCount > 0
+            ? `${txCount} historical ledger transaction(s) will be permanently deleted with this account`
+            : 'No historical transactions'
+        }
       ]
     },
     allowedActions
@@ -235,24 +263,38 @@ async function getCustomerPreview(cid, client = null) {
   const activeLoanCount = parseInt(dep.active_loan_count, 10) || 0;
   const activeCardCount = parseInt(dep.active_card_count, 10) || 0;
 
-  const blockReasons = [];
-  if (holderCount > 0) {
-    blockReasons.push(
-      `Customer has ${holderCount} active account ownership relationship(s). Accounts must be closed or ownership transferred first.`
-    );
+  const hasProtectedHistory = holderCount > 0 || loanCount > 0 || cardCount > 0;
+  const financialProtectionReasons = [];
+  if (holderCount > 0) financialProtectionReasons.push(`${holderCount} active account relationship(s)`);
+  if (loanCount > 0) financialProtectionReasons.push(`${loanCount} registered loan facility(ies)`);
+  if (cardCount > 0) financialProtectionReasons.push(`${cardCount} registered credit card(s)`);
+  const financialProtectionReason = hasProtectedHistory
+    ? `Customer has ${financialProtectionReasons.join(', ')}.`
+    : null;
+
+  const consequenceWarning = hasProtectedHistory
+    ? `Permanently deleting this customer profile will cascade and delete all registered credit cards (${cardCount}), loan facilities (${loanCount}) with their repayments, and sole-owned bank accounts (${holderCount} linked accounts). Joint account ownerships will be severed.`
+    : `Permanently deleting this customer profile will remove contact phone numbers and saved beneficiaries.`;
+
+  const recordsToDelete = [
+    { label: 'Customer Profile', count: 1, description: 'Core customer record' },
+    { label: 'Phone Numbers', count: phoneCount, description: 'Contact phone numbers (CASCADE)' },
+    { label: 'Saved Beneficiaries', count: beneCount, description: 'Customer beneficiary entries (CASCADE)' }
+  ];
+  if (cardCount > 0) {
+    recordsToDelete.push({
+      label: 'Credit Cards',
+      count: cardCount,
+      description: 'Credit cards will be permanently deleted'
+    });
   }
   if (loanCount > 0) {
-    blockReasons.push(
-      `Customer has ${loanCount} registered loan facility(ies). Loans must be settled or closed before customer profile deletion.`
-    );
+    recordsToDelete.push({
+      label: 'Loan Facilities',
+      count: loanCount,
+      description: 'Loan facilities and repayment installments will be permanently deleted'
+    });
   }
-  if (cardCount > 0) {
-    blockReasons.push(
-      `Customer has ${cardCount} registered credit card(s). Credit cards must be cancelled or removed first.`
-    );
-  }
-
-  const isBlocked = blockReasons.length > 0;
 
   // Deactivation rules: permitted only if no active loans or active cards
   const canDeactivate = cust.status === 'ACTIVE' && activeLoanCount === 0 && activeCardCount === 0;
@@ -270,8 +312,8 @@ async function getCustomerPreview(cid, client = null) {
       action: 'delete_permanent',
       label: 'Delete Permanently',
       variant: 'danger',
-      enabled: !isBlocked,
-      disabledReason: isBlocked ? blockReasons[0] : null
+      enabled: true,
+      disabledReason: null
     },
     {
       action: 'deactivate_customer',
@@ -297,23 +339,35 @@ async function getCustomerPreview(cid, client = null) {
     entityId: String(cid),
     entityTitle: `${cust.first_name} ${cust.last_name || ''} (#${cid})`,
     target: cust,
-    isBlocked,
-    blockReasons,
+    isBlocked: false,
+    hasProtectedHistory,
+    financialProtectionReason,
+    consequenceWarning,
+    blockReasons: [],
     impact: {
-      recordsToDelete: [
-        { label: 'Customer Profile', count: 1, description: 'Core customer record' },
-        { label: 'Phone Numbers', count: phoneCount, description: 'Contact phone numbers (CASCADE)' },
-        { label: 'Saved Beneficiaries', count: beneCount, description: 'Customer beneficiary entries (CASCADE)' }
-      ],
+      recordsToDelete,
       relationshipsToRemove: [
-        { label: 'Nominee Linkages', count: nomCount, description: 'Nominee links to this customer (SET NULL)' }
+        { label: 'Nominee Linkages', count: nomCount, description: 'Nominee links to this customer (SET NULL)' },
+        { label: 'Joint Account Ownerships', count: holderCount, description: 'Account ownership links severed' }
       ],
       retainedRecords: [
-        { label: 'Associated Bank Accounts', count: holderCount, description: 'Bank accounts retained' }
+        { label: 'Joint Bank Accounts', count: holderCount, description: 'Bank accounts co-owned with other customers are preserved' }
       ],
       protectedFinancialRecords: [
-        { label: 'Active Loan Facilities', count: loanCount, description: 'Loan agreements and repayments' },
-        { label: 'Credit Card Accounts', count: cardCount, description: 'Credit card accounts' }
+        {
+          label: 'Active Loan Facilities',
+          count: loanCount,
+          description: loanCount > 0
+            ? `${loanCount} loan facility(ies) and repayments will be permanently deleted`
+            : 'No active loans'
+        },
+        {
+          label: 'Credit Card Accounts',
+          count: cardCount,
+          description: cardCount > 0
+            ? `${cardCount} credit card(s) will be permanently deleted`
+            : 'No credit cards'
+        }
       ]
     },
     allowedActions
@@ -334,10 +388,6 @@ async function getCreditCardPreview(pno, client = null) {
     throw new AppError(`Credit Card #${pno} not found.`, 404);
   }
   const card = cardRes.rows[0];
-
-  // No child tables directly reference creditcard.pno
-  const isBlocked = false;
-  const blockReasons = [];
 
   const allowedActions = [
     {
@@ -374,8 +424,11 @@ async function getCreditCardPreview(pno, client = null) {
     entityId: String(pno),
     entityTitle: `${card.type} Card •••• ${String(pno).slice(-4)}`,
     target: card,
-    isBlocked,
-    blockReasons,
+    isBlocked: false,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning: 'Permanently deleting this credit card will remove the card contract and credentials. Customer profile and bank accounts will be retained.',
+    blockReasons: [],
     impact: {
       recordsToDelete: [
         { label: 'Credit Card Record', count: 1, description: 'Card contract and credentials' }
@@ -423,22 +476,33 @@ async function getLoanPreview(lId, client = null) {
 
   const remainingPrincipal = Math.max(0, loanAmount - paidPrincipal);
 
-  const blockReasons = [];
-  if (paymentCount > 0) {
-    blockReasons.push(
-      `Loan has ${paymentCount} recorded repayment installment(s) totaling ₹${totalPaid.toLocaleString('en-IN')}. Financial audit rules protect repayment history from deletion.`
-    );
-  }
+  const hasProtectedHistory = paymentCount > 0;
+  const financialProtectionReason = hasProtectedHistory
+    ? `Loan has ${paymentCount} recorded repayment installment(s) totaling ₹${totalPaid.toLocaleString('en-IN')}.`
+    : null;
 
-  const isBlocked = blockReasons.length > 0;
+  const consequenceWarning = paymentCount > 0
+    ? `Permanently deleting this loan agreement will cascade and delete all associated repayment installment records (${paymentCount} payment${paymentCount === 1 ? '' : 's'} totaling ₹${totalPaid.toLocaleString('en-IN')}). The borrower customer profile will be retained and officer responsibilities will be removed.`
+    : `Permanently deleting this loan agreement will remove the loan facility. The borrower customer profile will be retained.`;
+
+  const recordsToDelete = [
+    { label: 'Loan Agreement Record', count: 1, description: 'Loan agreement' }
+  ];
+  if (paymentCount > 0) {
+    recordsToDelete.push({
+      label: 'Repayment Installments',
+      count: paymentCount,
+      description: 'Repayment installments will be permanently deleted with this loan agreement'
+    });
+  }
 
   const allowedActions = [
     {
       action: 'delete_permanent',
       label: 'Delete Permanently',
       variant: 'danger',
-      enabled: !isBlocked,
-      disabledReason: isBlocked ? blockReasons[0] : null
+      enabled: true,
+      disabledReason: null
     }
   ];
 
@@ -462,12 +526,13 @@ async function getLoanPreview(lId, client = null) {
       totalPaid,
       remainingPrincipal
     },
-    isBlocked,
-    blockReasons,
+    isBlocked: false,
+    hasProtectedHistory,
+    financialProtectionReason,
+    consequenceWarning,
+    blockReasons: [],
     impact: {
-      recordsToDelete: [
-        { label: 'Loan Agreement Record', count: 1, description: 'Loan agreement' }
-      ],
+      recordsToDelete,
       relationshipsToRemove: [
         { label: 'Assigned Officer Responsibilities', count: respCount, description: 'Responsibility links (SET NULL)' }
       ],
@@ -475,7 +540,13 @@ async function getLoanPreview(lId, client = null) {
         { label: 'Customer Profile', count: 1, description: 'Borrower customer record is retained' }
       ],
       protectedFinancialRecords: [
-        { label: 'Repayment Installments', count: paymentCount, description: 'Loan payment audit transactions (IMMUTABLE)' }
+        {
+          label: 'Repayment Installments',
+          count: paymentCount,
+          description: paymentCount > 0
+            ? `${paymentCount} repayment installment(s) totaling ₹${totalPaid.toLocaleString('en-IN')} will be permanently deleted`
+            : 'No recorded repayments'
+        }
       ]
     },
     allowedActions
@@ -514,22 +585,15 @@ async function getEmployeePreview(empId, client = null) {
   const loanCount = parseInt(dep.loan_count, 10) || 0;
   const txCount = parseInt(dep.tx_count, 10) || 0;
 
-  const blockReasons = [];
-  if (activeRespCount > 0) {
-    blockReasons.push(
-      `Employee holds ${activeRespCount} active operational assignment(s). Reassign responsibilities before deletion.`
-    );
-  }
-
-  const isBlocked = blockReasons.length > 0;
+  const consequenceWarning = `Deleting this staff member will remove their operational role assignments (${totalRespCount} assignment${totalRespCount === 1 ? '' : 's'}). Assigned customer, loan, and teller transaction records will be retained with officer links cleared.`;
 
   const allowedActions = [
     {
       action: 'delete_permanent',
       label: 'Delete Permanently',
       variant: 'danger',
-      enabled: !isBlocked,
-      disabledReason: isBlocked ? blockReasons[0] : null
+      enabled: true,
+      disabledReason: null
     },
     {
       action: 'deactivate_employee',
@@ -555,21 +619,24 @@ async function getEmployeePreview(empId, client = null) {
     entityId: String(empId),
     entityTitle: `${emp.first_name} ${emp.last_name || ''} (Staff #${empId})`,
     target: emp,
-    isBlocked,
-    blockReasons,
+    isBlocked: false,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning,
+    blockReasons: [],
     impact: {
       recordsToDelete: [
         { label: 'Employee Record', count: 1, description: 'Staff directory record' }
       ],
       relationshipsToRemove: [
-        { label: 'Role Responsibilities', count: totalRespCount, description: 'Role assignments' }
+        { label: 'Role Responsibilities', count: totalRespCount, description: 'Role assignments removed' }
       ],
       retainedRecords: [
         { label: 'Assigned Customers', count: custCount, description: 'Manager links set to NULL; customers retained' },
         { label: 'Assigned Loans', count: loanCount, description: 'Officer links set to NULL; loans retained' }
       ],
       protectedFinancialRecords: [
-        { label: 'Processed Transactions', count: txCount, description: 'Teller audit transactions (retained)' }
+        { label: 'Processed Transactions', count: txCount, description: 'Teller audit transactions retained with staff ID set to NULL' }
       ]
     },
     allowedActions
@@ -596,35 +663,119 @@ async function getBranchPreview(bId, client = null) {
     `SELECT
       (SELECT count(*) FROM employee WHERE b_id = $1) as emp_count,
       (SELECT count(*) FROM account WHERE b_id = $1) as acc_count,
-      (SELECT count(*) FROM responsible_for WHERE b_id = $1) as resp_count`,
+      (SELECT COALESCE(SUM(balance), 0) FROM account WHERE b_id = $1) as total_balance,
+      (SELECT count(*) FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)) as tx_count,
+      (SELECT COALESCE(SUM(amount), 0) FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)) as total_tx_amount,
+      (SELECT count(*) FROM responsible_for WHERE b_id = $1 OR emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1) OR t_id IN (SELECT t_id FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1))) as resp_count,
+      (SELECT count(*) FROM nominee WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)) as nom_count,
+      (SELECT count(*) FROM account_holder WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)) as holder_count,
+      (SELECT count(*) FROM beneficiary WHERE internal_acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)) as bene_link_count,
+      (SELECT count(DISTINCT cid) FROM customer WHERE emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)) as managed_cust_count,
+      (SELECT count(*) FROM loan WHERE assigned_emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)) as assigned_loan_count`,
     [bId]
   );
   const dep = depRes.rows[0];
   const empCount = parseInt(dep.emp_count, 10) || 0;
   const accCount = parseInt(dep.acc_count, 10) || 0;
+  const totalBalance = parseFloat(dep.total_balance) || 0;
+  const txCount = parseInt(dep.tx_count, 10) || 0;
+  const totalTxAmount = parseFloat(dep.total_tx_amount) || 0;
   const respCount = parseInt(dep.resp_count, 10) || 0;
+  const nomCount = parseInt(dep.nom_count, 10) || 0;
+  const holderCount = parseInt(dep.holder_count, 10) || 0;
+  const beneLinkCount = parseInt(dep.bene_link_count, 10) || 0;
+  const managedCustCount = parseInt(dep.managed_cust_count, 10) || 0;
+  const assignedLoanCount = parseInt(dep.assigned_loan_count, 10) || 0;
 
+  // Branch permanent deletion is permitted regardless of dependencies
+  const isBlocked = false;
   const blockReasons = [];
+
+  const hasDependencies = empCount > 0 || accCount > 0 || respCount > 0 || txCount > 0;
+  const consequenceWarning = hasDependencies
+    ? 'Deleting this branch will permanently remove the branch and the dependent records listed below. This operation cannot be undone.'
+    : 'Permanently deleting this branch will remove its directory entry and any associated supervisory duty links. This operation cannot be undone.';
+
+  const recordsToDelete = [
+    { label: 'Branch Record', count: 1, description: 'Core branch directory record' }
+  ];
   if (empCount > 0) {
-    blockReasons.push(
-      `Branch has ${empCount} employee(s) assigned. Reassign staff to other branches before branch deletion.`
-    );
+    recordsToDelete.push({
+      label: 'Assigned Employees',
+      count: empCount,
+      description: 'Staff directory records assigned to this branch (CASCADE)'
+    });
   }
   if (accCount > 0) {
-    blockReasons.push(
-      `Branch has ${accCount} active bank account(s) domiciled. Transfer accounts before branch deletion.`
-    );
+    recordsToDelete.push({
+      label: 'Domiciled Accounts',
+      count: accCount,
+      description: `Bank accounts domiciled at this branch totaling ₹${totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })} (CASCADE)`
+    });
+  }
+  if (nomCount > 0) {
+    recordsToDelete.push({
+      label: 'Nominee Registrations',
+      count: nomCount,
+      description: 'Nominees registered on domiciled accounts (CASCADE)'
+    });
   }
 
-  const isBlocked = blockReasons.length > 0;
+  const relationshipsToRemove = [];
+  if (respCount > 0) {
+    relationshipsToRemove.push({
+      label: 'Operational Assignments',
+      count: respCount,
+      description: 'Branch, staff, and transaction role duties (CASCADE)'
+    });
+  }
+  if (holderCount > 0) {
+    relationshipsToRemove.push({
+      label: 'Account Ownerships',
+      count: holderCount,
+      description: 'Customer account ownership links (CASCADE)'
+    });
+  }
+
+  const retainedRecords = [];
+  if (managedCustCount > 0 || holderCount > 0) {
+    retainedRecords.push({
+      label: 'Customer Profiles',
+      count: Math.max(managedCustCount, holderCount),
+      description: 'Customer profiles are retained; staff relationship manager links set to NULL'
+    });
+  }
+  if (assignedLoanCount > 0) {
+    retainedRecords.push({
+      label: 'Loan Facilities',
+      count: assignedLoanCount,
+      description: 'Loans and repayments are retained; officer assignment links set to NULL'
+    });
+  }
+  if (beneLinkCount > 0) {
+    retainedRecords.push({
+      label: 'Beneficiary Links',
+      count: beneLinkCount,
+      description: 'Beneficiary payee records preserved; internal account links set to NULL'
+    });
+  }
+
+  const protectedFinancialRecords = [];
+  if (txCount > 0) {
+    protectedFinancialRecords.push({
+      label: 'Historical Ledger Transactions',
+      count: txCount,
+      description: `${txCount} historical transaction(s) totaling ₹${totalTxAmount.toLocaleString('en-IN')} will be permanently deleted with the branch accounts`
+    });
+  }
 
   const allowedActions = [
     {
       action: 'delete_permanent',
       label: 'Delete Permanently',
       variant: 'danger',
-      enabled: !isBlocked,
-      disabledReason: isBlocked ? blockReasons[0] : null
+      enabled: true,
+      disabledReason: null
     },
     {
       action: 'deactivate_branch',
@@ -650,20 +801,16 @@ async function getBranchPreview(bId, client = null) {
     entityId: String(bId),
     entityTitle: `${branch.branch_name} Branch (${branch.ifsc})`,
     target: branch,
-    isBlocked,
-    blockReasons,
+    isBlocked: false,
+    hasProtectedHistory: txCount > 0 || accCount > 0 || empCount > 0,
+    financialProtectionReason: txCount > 0 ? `Branch accounts have ${txCount} historical transactions totaling ₹${totalTxAmount.toLocaleString('en-IN')}.` : null,
+    consequenceWarning,
+    blockReasons: [],
     impact: {
-      recordsToDelete: [
-        { label: 'Branch Record', count: 1, description: 'Branch directory entry' }
-      ],
-      relationshipsToRemove: [
-        { label: 'Operational Assignments', count: respCount, description: 'Branch supervisory links' }
-      ],
-      retainedRecords: [
-        { label: 'Branch Staff', count: empCount, description: 'Staff members must be transferred' },
-        { label: 'Domiciled Accounts', count: accCount, description: 'Customer accounts must be transferred' }
-      ],
-      protectedFinancialRecords: []
+      recordsToDelete,
+      relationshipsToRemove,
+      retainedRecords,
+      protectedFinancialRecords
     },
     allowedActions
   };
@@ -684,6 +831,9 @@ async function getNomineePreview(nId, client = null) {
     entityTitle: `Nominee: ${nom.first_name} ${nom.last_name || ''} (${nom.relationship})`,
     target: nom,
     isBlocked: false,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning: `Permanently deleting this nominee registration will remove it from Account #${nom.acc_id}. The account and customer records will be retained.`,
     blockReasons: [],
     impact: {
       recordsToDelete: [
@@ -691,7 +841,7 @@ async function getNomineePreview(nId, client = null) {
       ],
       relationshipsToRemove: [],
       retainedRecords: [
-        { label: 'Account', count: 1, description: 'Account #${nom.acc_id} remains active' }
+        { label: 'Account', count: 1, description: `Account #${nom.acc_id} remains active` }
       ],
       protectedFinancialRecords: []
     },
@@ -713,6 +863,9 @@ async function getBeneficiaryPreview(beneId, client = null) {
     entityTitle: `Beneficiary: ${bene.beneficiary_name} (${bene.nickname})`,
     target: bene,
     isBlocked: false,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning: `Permanently deleting this beneficiary entry will remove payee credentials for '${bene.beneficiary_name}'. Customer profile and past transfer history will be retained.`,
     blockReasons: [],
     impact: {
       recordsToDelete: [
@@ -742,6 +895,9 @@ async function getCustomerPhonePreview(cid, phone, client = null) {
     entityTitle: `Phone: ${p.phone} (${p.phone_type})`,
     target: p,
     isBlocked: false,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning: `Removing phone number '${p.phone}' will delete it from Customer #${cid}'s contact records. Other contact methods and accounts will be retained.`,
     blockReasons: [],
     impact: {
       recordsToDelete: [
@@ -776,8 +932,12 @@ async function getAccountHolderPreview(accId, cid, client = null) {
 
   const isBlocked = totalHolders <= 1;
   const blockReasons = isBlocked
-    ? ['Cannot remove the only registered account holder. An account must retain at least one owner.']
+    ? ['Cannot remove the only registered account holder. An account must retain at least one owner. Delete the account instead if you wish to close it.']
     : [];
+
+  const consequenceWarning = isBlocked
+    ? null
+    : `Removing customer #${cid}'s ownership link will sever joint ownership on Account #${accId}. The account will remain active under the remaining registered owner(s).`;
 
   return {
     entityType: 'account_holder',
@@ -785,6 +945,9 @@ async function getAccountHolderPreview(accId, cid, client = null) {
     entityTitle: `Ownership: Customer #${cid} on Account #${accId}`,
     target: holder,
     isBlocked,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning,
     blockReasons,
     impact: {
       recordsToDelete: [],
@@ -792,7 +955,7 @@ async function getAccountHolderPreview(accId, cid, client = null) {
         { label: 'Account Holder Link', count: 1, description: 'Joint/co-owner relationship severed' }
       ],
       retainedRecords: [
-        { label: 'Account', count: 1, description: 'Account #${accId} remains active' },
+        { label: 'Account', count: 1, description: `Account #${accId} remains active` },
         { label: 'Customer Profile', count: 1, description: 'Customer profile remains active' }
       ],
       protectedFinancialRecords: []
@@ -805,6 +968,42 @@ async function getAccountHolderPreview(accId, cid, client = null) {
         enabled: !isBlocked,
         disabledReason: isBlocked ? blockReasons[0] : null
       }
+    ]
+  };
+}
+
+/**
+ * Operational Duty Assignment Deletion Preview (responsible_for)
+ */
+async function getResponsibleForPreview(rfId, client = null) {
+  const executor = client || db;
+  const res = await executor.query(`SELECT * FROM responsible_for WHERE rf_id = $1`, [rfId]);
+  if (res.rows.length === 0) throw new AppError(`Duty assignment #${rfId} not found.`, 404);
+  const duty = res.rows[0];
+
+  return {
+    entityType: 'responsible_for',
+    entityId: String(rfId),
+    entityTitle: `Assignment #${rfId} (${duty.role_type})`,
+    target: duty,
+    isBlocked: false,
+    hasProtectedHistory: false,
+    financialProtectionReason: null,
+    consequenceWarning: `Permanently deleting duty assignment #${rfId} will remove the operational role mapping. Employee #${duty.emp_id} and Branch #${duty.b_id} will be retained.`,
+    blockReasons: [],
+    impact: {
+      recordsToDelete: [
+        { label: 'Duty Assignment Record', count: 1, description: 'Operational duty record from responsible_for' }
+      ],
+      relationshipsToRemove: [],
+      retainedRecords: [
+        { label: 'Staff Member', count: 1, description: `Employee #${duty.emp_id} is retained` },
+        { label: 'Branch Record', count: 1, description: `Branch #${duty.b_id} is retained` }
+      ],
+      protectedFinancialRecords: []
+    },
+    allowedActions: [
+      { action: 'delete_permanent', label: 'Delete Assignment', variant: 'danger', enabled: true, disabledReason: null }
     ]
   };
 }
@@ -846,37 +1045,95 @@ async function confirmPermanentDelete(entityInput, id, extraParam = null, { empI
     // 2. Execute deletion according to entity rules
     switch (entity) {
       case 'account': {
-        // Double check balance & transactions
-        const check = await client.query(
-          `SELECT balance, (SELECT count(*) FROM "transaction" WHERE acc_id = $1) as tx_count FROM account WHERE acc_id = $1`,
+        // Cascading deletion for account:
+        // 1. Delete responsibility entries attached to this account's transactions
+        await client.query(
+          `DELETE FROM responsible_for WHERE t_id IN (SELECT t_id FROM "transaction" WHERE acc_id = $1)`,
           [id]
         );
-        if (check.rows.length === 0) throw new AppError(`Account #${id} not found.`, 404);
-        if (parseFloat(check.rows[0].balance) > 0 || parseInt(check.rows[0].tx_count, 10) > 0) {
-          throw new AppError(`Concurrent change detected: Account balance or transaction history is no longer zero. Deletion aborted.`, 409);
-        }
 
+        // 2. Unlink any self-referencing related_trans_id
+        await client.query(
+          `UPDATE "transaction" SET related_trans_id = NULL WHERE related_trans_id IN (SELECT t_id FROM "transaction" WHERE acc_id = $1)`,
+          [id]
+        );
+
+        // 3. Unlink transactions where related_acc_id points to this account
+        await client.query(
+          `UPDATE "transaction" SET related_acc_id = NULL WHERE related_acc_id = $1`,
+          [id]
+        );
+
+        // 4. Unlink beneficiaries pointing to this internal account
+        await client.query(
+          `UPDATE beneficiary SET internal_acc_id = NULL WHERE internal_acc_id = $1`,
+          [id]
+        );
+
+        // 5. Delete all transactions for this account
+        await client.query(`DELETE FROM "transaction" WHERE acc_id = $1`, [id]);
+
+        // 6. Delete account root record (CockroachDB cascades account_holder and nominee)
         const delRes = await client.query(`DELETE FROM account WHERE acc_id = $1 RETURNING *`, [id]);
+        if (delRes.rows.length === 0) throw new AppError(`Account #${id} not found.`, 404);
         deletedRecord = delRes.rows[0];
         break;
       }
 
       case 'customer': {
-        // Double check accounts, loans, cards
-        const check = await client.query(
-          `SELECT
-            (SELECT count(*) FROM account_holder WHERE cid = $1) as acc_count,
-            (SELECT count(*) FROM loan WHERE cid = $1) as loan_count,
-            (SELECT count(*) FROM creditcard WHERE cid = $1) as card_count`,
-          [id]
-        );
-        if (check.rows.length === 0) throw new AppError(`Customer #${id} not found.`, 404);
-        const r = check.rows[0];
-        if (parseInt(r.acc_count, 10) > 0 || parseInt(r.loan_count, 10) > 0 || parseInt(r.card_count, 10) > 0) {
-          throw new AppError(`Concurrent change detected: Customer has newly linked accounts, loans, or cards. Deletion aborted.`, 409);
+        // Cascading deletion for customer:
+        // 1. Delete customer's loans (and payments/responsibilities)
+        const custLoans = await client.query(`SELECT l_id FROM loan WHERE cid = $1`, [id]);
+        if (custLoans.rows.length > 0) {
+          await client.query(
+            `DELETE FROM loan_payment WHERE l_id IN (SELECT l_id FROM loan WHERE cid = $1)`,
+            [id]
+          );
+          await client.query(
+            `DELETE FROM responsible_for WHERE l_id IN (SELECT l_id FROM loan WHERE cid = $1)`,
+            [id]
+          );
+          await client.query(`DELETE FROM loan WHERE cid = $1`, [id]);
         }
 
+        // 2. Delete customer's credit cards
+        await client.query(`DELETE FROM creditcard WHERE cid = $1`, [id]);
+
+        // 3. Handle accounts where this customer is the sole holder
+        const soleAccs = await client.query(
+          `SELECT acc_id FROM account_holder
+           WHERE cid = $1
+             AND acc_id IN (SELECT acc_id FROM account_holder GROUP BY acc_id HAVING count(*) = 1)`,
+          [id]
+        );
+        for (const row of soleAccs.rows) {
+          const soleAccId = row.acc_id;
+          await client.query(
+            `DELETE FROM responsible_for WHERE t_id IN (SELECT t_id FROM "transaction" WHERE acc_id = $1)`,
+            [soleAccId]
+          );
+          await client.query(
+            `UPDATE "transaction" SET related_trans_id = NULL WHERE related_trans_id IN (SELECT t_id FROM "transaction" WHERE acc_id = $1)`,
+            [soleAccId]
+          );
+          await client.query(
+            `UPDATE "transaction" SET related_acc_id = NULL WHERE related_acc_id = $1`,
+            [soleAccId]
+          );
+          await client.query(
+            `UPDATE beneficiary SET internal_acc_id = NULL WHERE internal_acc_id = $1`,
+            [soleAccId]
+          );
+          await client.query(`DELETE FROM "transaction" WHERE acc_id = $1`, [soleAccId]);
+          await client.query(`DELETE FROM account WHERE acc_id = $1`, [soleAccId]);
+        }
+
+        // 4. Remove customer ownership from any remaining joint accounts
+        await client.query(`DELETE FROM account_holder WHERE cid = $1`, [id]);
+
+        // 5. Delete customer (CockroachDB cascades phones, beneficiaries, sets nominee cid to null)
         const delRes = await client.query(`DELETE FROM customer WHERE cid = $1 RETURNING *`, [id]);
+        if (delRes.rows.length === 0) throw new AppError(`Customer #${id} not found.`, 404);
         deletedRecord = delRes.rows[0];
         break;
       }
@@ -889,15 +1146,8 @@ async function confirmPermanentDelete(entityInput, id, extraParam = null, { empI
       }
 
       case 'loan': {
-        // Double check payments
-        const check = await client.query(
-          `SELECT count(*) as count FROM loan_payment WHERE l_id = $1`,
-          [id]
-        );
-        if (parseInt(check.rows[0].count, 10) > 0) {
-          throw new AppError(`Concurrent change detected: Loan repayments have been posted. Deletion aborted.`, 409);
-        }
-
+        await client.query(`DELETE FROM loan_payment WHERE l_id = $1`, [id]);
+        await client.query(`DELETE FROM responsible_for WHERE l_id = $1`, [id]);
         const delRes = await client.query(`DELETE FROM loan WHERE l_id = $1 RETURNING *`, [id]);
         if (delRes.rows.length === 0) throw new AppError(`Loan #${id} not found.`, 404);
         deletedRecord = delRes.rows[0];
@@ -905,14 +1155,13 @@ async function confirmPermanentDelete(entityInput, id, extraParam = null, { empI
       }
 
       case 'employee': {
-        // Double check active duties
-        const check = await client.query(
-          `SELECT count(*) as count FROM responsible_for WHERE emp_id = $1 AND status = 'ACTIVE'`,
-          [id]
-        );
-        if (parseInt(check.rows[0].count, 10) > 0) {
-          throw new AppError(`Concurrent change detected: Employee has active duties. Deletion aborted.`, 409);
-        }
+        // Unlink duty assignments
+        await client.query(`DELETE FROM responsible_for WHERE emp_id = $1`, [id]);
+        // Unlink references in customer, loan, transaction, audit_log
+        await client.query(`UPDATE customer SET emp_id = NULL WHERE emp_id = $1`, [id]);
+        await client.query(`UPDATE loan SET assigned_emp_id = NULL WHERE assigned_emp_id = $1`, [id]);
+        await client.query(`UPDATE "transaction" SET processed_by_emp_id = NULL WHERE processed_by_emp_id = $1`, [id]);
+        await client.query(`UPDATE audit_log SET emp_id = NULL WHERE emp_id = $1`, [id]);
 
         const delRes = await client.query(`DELETE FROM employee WHERE emp_id = $1 RETURNING *`, [id]);
         if (delRes.rows.length === 0) throw new AppError(`Employee #${id} not found.`, 404);
@@ -921,19 +1170,142 @@ async function confirmPermanentDelete(entityInput, id, extraParam = null, { empI
       }
 
       case 'branch': {
-        const check = await client.query(
+        // Query dependency counts for audit log and summary before cascade
+        const stats = await client.query(
           `SELECT
             (SELECT count(*) FROM employee WHERE b_id = $1) as emp_count,
-            (SELECT count(*) FROM account WHERE b_id = $1) as acc_count`,
+            (SELECT count(*) FROM account WHERE b_id = $1) as acc_count,
+            (SELECT count(*) FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)) as tx_count,
+            (SELECT count(*) FROM responsible_for WHERE b_id = $1 OR emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1) OR t_id IN (SELECT t_id FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1))) as resp_count`,
           [id]
         );
-        const r = check.rows[0];
-        if (parseInt(r.emp_count, 10) > 0 || parseInt(r.acc_count, 10) > 0) {
-          throw new AppError(`Concurrent change detected: Branch has attached staff or accounts. Deletion aborted.`, 409);
-        }
+        const s = stats.rows[0];
 
-        const delRes = await client.query(`DELETE FROM branch WHERE b_id = $1 RETURNING *`, [id]);
+        // 1. Unlink self-referencing related_trans_id in transactions
+        await client.query(
+          `UPDATE "transaction"
+           SET related_trans_id = NULL
+           WHERE related_trans_id IN (
+             SELECT t_id FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)
+           )`,
+          [id]
+        );
+
+        // 2. Unlink related_acc_id in transactions pointing to this branch's accounts
+        await client.query(
+          `UPDATE "transaction"
+           SET related_acc_id = NULL
+           WHERE related_acc_id IN (
+             SELECT acc_id FROM account WHERE b_id = $1
+           )`,
+          [id]
+        );
+
+        // 3. Unlink beneficiaries pointing to this branch's internal accounts
+        await client.query(
+          `UPDATE beneficiary
+           SET internal_acc_id = NULL
+           WHERE internal_acc_id IN (
+             SELECT acc_id FROM account WHERE b_id = $1
+           )`,
+          [id]
+        );
+
+        // 4. Delete operational assignments (responsible_for) for this branch, its employees, or its account transactions
+        await client.query(
+          `DELETE FROM responsible_for
+           WHERE b_id = $1
+              OR emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)
+              OR t_id IN (SELECT t_id FROM "transaction" WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1))`,
+          [id]
+        );
+
+        // 5. Delete transactions of this branch's accounts
+        await client.query(
+          `DELETE FROM "transaction"
+           WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)`,
+          [id]
+        );
+
+        // 6. Delete account nominees and account holders
+        await client.query(
+          `DELETE FROM nominee
+           WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)`,
+          [id]
+        );
+
+        await client.query(
+          `DELETE FROM account_holder
+           WHERE acc_id IN (SELECT acc_id FROM account WHERE b_id = $1)`,
+          [id]
+        );
+
+        // 7. Delete accounts domiciled at this branch
+        await client.query(
+          `DELETE FROM account
+           WHERE b_id = $1`,
+          [id]
+        );
+
+        // 8. Unlink employee references across customer, loan, audit_log, and transaction
+        await client.query(
+          `UPDATE customer
+           SET emp_id = NULL
+           WHERE emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)`,
+          [id]
+        );
+
+        await client.query(
+          `UPDATE loan
+           SET assigned_emp_id = NULL
+           WHERE assigned_emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)`,
+          [id]
+        );
+
+        await client.query(
+          `UPDATE "transaction"
+           SET processed_by_emp_id = NULL
+           WHERE processed_by_emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)`,
+          [id]
+        );
+
+        await client.query(
+          `UPDATE audit_log
+           SET emp_id = NULL
+           WHERE emp_id IN (SELECT emp_id FROM employee WHERE b_id = $1)`,
+          [id]
+        );
+
+        // 9. Delete employees assigned to this branch
+        await client.query(
+          `DELETE FROM employee
+           WHERE b_id = $1`,
+          [id]
+        );
+
+        // 10. Delete the branch itself
+        const delRes = await client.query(
+          `DELETE FROM branch
+           WHERE b_id = $1
+           RETURNING *`,
+          [id]
+        );
         if (delRes.rows.length === 0) throw new AppError(`Branch #${id} not found.`, 404);
+        deletedRecord = {
+          ...delRes.rows[0],
+          cascaded: {
+            employeesDeleted: parseInt(s.emp_count, 10) || 0,
+            accountsDeleted: parseInt(s.acc_count, 10) || 0,
+            transactionsDeleted: parseInt(s.tx_count, 10) || 0,
+            dutiesDeleted: parseInt(s.resp_count, 10) || 0
+          }
+        };
+        break;
+      }
+
+      case 'responsible_for': {
+        const delRes = await client.query(`DELETE FROM responsible_for WHERE rf_id = $1 RETURNING *`, [id]);
+        if (delRes.rows.length === 0) throw new AppError(`Operational duty #${id} not found.`, 404);
         deletedRecord = delRes.rows[0];
         break;
       }
@@ -1022,9 +1394,12 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (entity !== 'account') throw new AppError(`Action 'close_account' is only valid for accounts.`, 400);
         const accCheck = await client.query(`SELECT balance, status FROM account WHERE acc_id = $1`, [id]);
         if (accCheck.rows.length === 0) throw new AppError(`Account #${id} not found.`, 404);
-        const bal = parseFloat(accCheck.rows[0].balance);
-        if (bal !== 0) {
-          throw new AppError(`Account balance must be zero before closing. Current balance: ₹${bal.toLocaleString('en-IN')}`, 400);
+        const acc = accCheck.rows[0];
+        if (parseFloat(acc.balance) > 0) {
+          throw new AppError(`Cannot close account with positive balance (₹${parseFloat(acc.balance).toLocaleString('en-IN')}). Withdraw funds first.`, 400);
+        }
+        if (acc.status === 'CLOSED') {
+          throw new AppError(`Account #${id} is already closed.`, 400);
         }
 
         const res = await client.query(
@@ -1033,39 +1408,38 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         );
         updatedRecord = res.rows[0];
         auditAction = 'CLOSE_ACCOUNT';
-        message = `Account #${id} successfully closed. Balance is zero.`;
+        message = `Account #${id} successfully closed.`;
         break;
       }
 
       case 'reopen_account': {
         if (entity !== 'account') throw new AppError(`Action 'reopen_account' is only valid for accounts.`, 400);
         const res = await client.query(
-          `UPDATE account SET status = 'ACTIVE' WHERE acc_id = $1 RETURNING *`,
+          `UPDATE account SET status = 'ACTIVE' WHERE acc_id = $1 AND status = 'CLOSED' RETURNING *`,
           [id]
         );
-        if (res.rows.length === 0) throw new AppError(`Account #${id} not found.`, 404);
+        if (res.rows.length === 0) throw new AppError(`Account #${id} is not closed or does not exist.`, 400);
         updatedRecord = res.rows[0];
         auditAction = 'REOPEN_ACCOUNT';
-        message = `Account #${id} successfully reopened and activated.`;
+        message = `Account #${id} successfully reopened.`;
         break;
       }
 
       // 2. Customer actions
       case 'deactivate_customer': {
         if (entity !== 'customer') throw new AppError(`Action 'deactivate_customer' is only valid for customers.`, 400);
-        // Verify no active unpaid loans or cards
-        const check = await client.query(
+        const depCheck = await client.query(
           `SELECT
             (SELECT count(*) FROM loan WHERE cid = $1 AND status IN ('ACTIVE', 'APPROVED', 'PENDING')) as active_loans,
             (SELECT count(*) FROM creditcard WHERE cid = $1 AND status = 'ACTIVE') as active_cards`,
           [id]
         );
-        const r = check.rows[0];
+        const r = depCheck.rows[0];
         if (parseInt(r.active_loans, 10) > 0) {
-          throw new AppError(`Cannot deactivate customer: Customer has active loan obligations.`, 400);
+          throw new AppError(`Cannot deactivate customer with active loan facilities. Settle loans first.`, 400);
         }
         if (parseInt(r.active_cards, 10) > 0) {
-          throw new AppError(`Cannot deactivate customer: Customer has active credit card accounts.`, 400);
+          throw new AppError(`Cannot deactivate customer with active credit cards. Cancel or close cards first.`, 400);
         }
 
         const res = await client.query(
@@ -1075,7 +1449,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Customer #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'DEACTIVATE_CUSTOMER';
-        message = `Customer #${id} (${updatedRecord.first_name} ${updatedRecord.last_name || ''}) deactivated.`;
+        message = `Customer #${id} successfully deactivated.`;
         break;
       }
 
@@ -1088,7 +1462,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Customer #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'REACTIVATE_CUSTOMER';
-        message = `Customer #${id} reactivated to ACTIVE status.`;
+        message = `Customer #${id} successfully reactivated.`;
         break;
       }
 
@@ -1096,26 +1470,26 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
       case 'block_card': {
         if (entity !== 'creditcard') throw new AppError(`Action 'block_card' is only valid for credit cards.`, 400);
         const res = await client.query(
-          `UPDATE creditcard SET status = 'BLOCKED' WHERE pno = $1 RETURNING *`,
+          `UPDATE creditcard SET status = 'BLOCKED' WHERE pno = $1 AND status = 'ACTIVE' RETURNING *`,
           [id]
         );
-        if (res.rows.length === 0) throw new AppError(`Credit card #${id} not found.`, 404);
+        if (res.rows.length === 0) throw new AppError(`Card #${id} is not active or does not exist.`, 400);
         updatedRecord = res.rows[0];
         auditAction = 'BLOCK_CREDITCARD';
-        message = `Credit card •••• ${String(id).slice(-4)} has been BLOCKED.`;
+        message = `Credit Card •••• ${String(id).slice(-4)} successfully blocked.`;
         break;
       }
 
       case 'unblock_card': {
         if (entity !== 'creditcard') throw new AppError(`Action 'unblock_card' is only valid for credit cards.`, 400);
         const res = await client.query(
-          `UPDATE creditcard SET status = 'ACTIVE' WHERE pno = $1 RETURNING *`,
+          `UPDATE creditcard SET status = 'ACTIVE' WHERE pno = $1 AND status = 'BLOCKED' RETURNING *`,
           [id]
         );
-        if (res.rows.length === 0) throw new AppError(`Credit card #${id} not found.`, 404);
+        if (res.rows.length === 0) throw new AppError(`Card #${id} is not blocked or does not exist.`, 400);
         updatedRecord = res.rows[0];
         auditAction = 'UNBLOCK_CREDITCARD';
-        message = `Credit card •••• ${String(id).slice(-4)} has been UNBLOCKED and set to ACTIVE.`;
+        message = `Credit Card •••• ${String(id).slice(-4)} successfully unblocked.`;
         break;
       }
 
@@ -1125,10 +1499,10 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
           `UPDATE creditcard SET status = 'CANCELLED' WHERE pno = $1 RETURNING *`,
           [id]
         );
-        if (res.rows.length === 0) throw new AppError(`Credit card #${id} not found.`, 404);
+        if (res.rows.length === 0) throw new AppError(`Card #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'CLOSE_CREDITCARD';
-        message = `Credit card •••• ${String(id).slice(-4)} has been CANCELLED.`;
+        message = `Credit Card •••• ${String(id).slice(-4)} cancelled and closed.`;
         break;
       }
 
@@ -1142,7 +1516,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Loan #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'SETTLE_LOAN';
-        message = `Loan #${id} has been settled and marked PAID_OFF.`;
+        message = `Loan #${id} settled and marked PAID_OFF.`;
         break;
       }
 
@@ -1156,7 +1530,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Employee #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'DEACTIVATE_EMPLOYEE';
-        message = `Staff #${id} (${updatedRecord.first_name} ${updatedRecord.last_name || ''}) deactivated.`;
+        message = `Employee #${id} deactivated.`;
         break;
       }
 
@@ -1169,7 +1543,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Employee #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'REACTIVATE_EMPLOYEE';
-        message = `Staff #${id} reactivated to ACTIVE status.`;
+        message = `Employee #${id} reactivated.`;
         break;
       }
 
@@ -1183,7 +1557,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Branch #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'DEACTIVATE_BRANCH';
-        message = `Branch #${id} (${updatedRecord.branch_name}) deactivated.`;
+        message = `Branch #${id} deactivated.`;
         break;
       }
 
@@ -1196,7 +1570,7 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         if (res.rows.length === 0) throw new AppError(`Branch #${id} not found.`, 404);
         updatedRecord = res.rows[0];
         auditAction = 'REACTIVATE_BRANCH';
-        message = `Branch #${id} (${updatedRecord.branch_name}) reactivated to ACTIVE status.`;
+        message = `Branch #${id} reactivated.`;
         break;
       }
 
@@ -1204,14 +1578,14 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
         throw new AppError(`Unknown lifecycle action '${action}' for entity '${entity}'.`, 400);
     }
 
-    // Record audit entry
+    // Record audit trail
     await recordAudit({
       client,
       empId,
       action: auditAction,
       entityName: entity.toUpperCase(),
       entityId: String(id),
-      details: { ...updatedRecord, reason: reason || 'User triggered lifecycle state change' },
+      details: { updatedRecord, reason },
       ipAddress
     });
 
@@ -1225,8 +1599,9 @@ async function executeLifecycleAction(entityInput, id, actionName, { empId = nul
 }
 
 module.exports = {
-  normalizeEntity,
   getDeletePreview,
   confirmPermanentDelete,
-  executeLifecycleAction
+  executeLifecycleAction,
+  normalizeEntity,
+  IMMUTABLE_FINANCIAL_ENTITIES
 };

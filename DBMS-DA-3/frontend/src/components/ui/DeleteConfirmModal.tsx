@@ -2,21 +2,18 @@ import React, { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   AlertOctagon,
-  ShieldAlert,
   Trash2,
   Lock,
   Link2Off,
   UserCheck,
   CheckCircle2,
   Loader2,
-  XCircle,
-  FileCheck2,
-  ArrowRight
+  XCircle
 } from 'lucide-react';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { Badge } from './Badge';
-import { api, ApiError } from '../../api/client';
+import { api } from '../../api/client';
 import { DeletePreviewData, AllowedAction } from '../../types';
 
 export interface DeleteConfirmModalProps {
@@ -78,9 +75,17 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
     };
   }, [isOpen, entityType, entityId, subId]);
 
+  // Determine if permanent deletion can be executed
+  const canExecutePermanentDelete = Boolean(
+    preview &&
+    !preview.isBlocked &&
+    confirmedIrreversible &&
+    !executing
+  );
+
   // Execute Permanent Delete
   const handlePermanentDelete = async () => {
-    if (!preview || preview.isBlocked || !confirmedIrreversible) return;
+    if (!canExecutePermanentDelete || !preview) return;
 
     setExecuting(true);
     setError(null);
@@ -180,12 +185,7 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
                 size="sm"
                 icon={<Trash2 className="w-4 h-4" />}
                 onClick={handlePermanentDelete}
-                disabled={
-                  !preview ||
-                  preview.isBlocked ||
-                  !confirmedIrreversible ||
-                  executing
-                }
+                disabled={!canExecutePermanentDelete}
                 isLoading={executing}
               >
                 Delete Permanently
@@ -193,6 +193,11 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
               {preview?.isBlocked && (
                 <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50 w-72 p-2 bg-obsidian-950 border border-rose-500/40 text-xs text-rose-300 rounded shadow-xl pointer-events-none">
                   {preview.blockReasons[0] || 'Permanent deletion is restricted by database constraints.'}
+                </div>
+              )}
+              {!preview?.isBlocked && !confirmedIrreversible && (
+                <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50 w-64 p-2 bg-obsidian-950 border border-obsidian-700 text-xs text-obsidian-300 rounded shadow-xl pointer-events-none">
+                  Check confirmation box to enable permanent deletion.
                 </div>
               )}
             </div>
@@ -246,39 +251,46 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
         </div>
       ) : preview ? (
         <div className="space-y-5">
-          {/* Status Notification Banner */}
+          {/* Status / Warning Notification Banner */}
           {preview.isBlocked ? (
             <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <AlertOctagon className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <div className="text-sm font-semibold text-amber-200">
-                  Permanent Deletion Blocked
+                  Permanent Deletion Restricted
                 </div>
                 <div className="text-xs text-amber-300/90">
-                  This record cannot be deleted because of active financial obligations or foreign-key constraints:
+                  This record cannot be deleted because of active structural dependencies or corporate hierarchy rules:
                 </div>
                 <ul className="text-xs text-amber-200/90 list-disc list-inside space-y-0.5 pt-1">
                   {preview.blockReasons.map((reason, idx) => (
                     <li key={idx}>{reason}</li>
                   ))}
                 </ul>
+                <div className="text-[11px] text-obsidian-400 pt-1 leading-relaxed">
+                  Reassign attached resources or transfer domiciled accounts to enable deletion, or execute an alternative lifecycle action (e.g. Deactivate) below.
+                </div>
               </div>
             </div>
           ) : (
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <div className="text-sm font-semibold text-emerald-200">
-                  Permanent Deletion Permitted
+            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="text-sm font-semibold text-rose-200">
+                  Permanent Deletion Warning
                 </div>
-                <div className="text-xs text-emerald-300/80 mt-0.5">
-                  No blocking foreign-key references or active financial dependencies detected. All constraints are clear for atomic removal.
+                <div className="text-xs text-rose-200/90 leading-relaxed">
+                  {preview.consequenceWarning ||
+                    'This action will permanently delete this record and its associated dependencies from CockroachDB.'}
+                </div>
+                <div className="text-[11px] text-rose-400/80 pt-0.5">
+                  This operation is final, atomic, and cannot be undone.
                 </div>
               </div>
             </div>
           )}
 
-          {/* Impact Matrix Grid */}
+          {/* Impact Matrix Grid (4 cards: To Delete, To Remove, Retained, Protected Financial Records) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* 1. Records to Delete */}
             <div className="p-3.5 rounded-xl bg-obsidian-950/60 border border-obsidian-800 space-y-2">
@@ -376,11 +388,11 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
               </div>
             </div>
 
-            {/* 4. Protected Financial Records */}
+            {/* 4. Protected Financial History */}
             <div className="p-3.5 rounded-xl bg-obsidian-950/60 border border-obsidian-800 space-y-2">
               <div className="flex items-center justify-between text-xs font-semibold text-violet-400 uppercase tracking-wider">
                 <span className="flex items-center gap-1.5">
-                  <Lock className="w-3.5 h-3.5 text-violet-400" /> Protected Financial Ledger
+                  <Lock className="w-3.5 h-3.5 text-violet-400" /> Protected Financial History
                 </span>
                 <span className="text-[11px] text-obsidian-500 font-mono">
                   {preview.impact.protectedFinancialRecords.reduce((acc, r) => acc + r.count, 0)} records
@@ -388,7 +400,7 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
               </div>
               <div className="space-y-1.5 pt-1">
                 {preview.impact.protectedFinancialRecords.length === 0 ? (
-                  <div className="text-xs text-obsidian-500 italic">None</div>
+                  <div className="text-xs text-obsidian-500 italic">None (No linked financial ledger records)</div>
                 ) : (
                   preview.impact.protectedFinancialRecords.map((item, idx) => (
                     <div
@@ -397,7 +409,7 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
                     >
                       <div>
                         <span className="font-medium text-obsidian-200">{item.label}</span>
-                        <p className="text-[10px] text-violet-300/70">{item.description}</p>
+                        <p className="text-[10px] text-violet-300/80">{item.description}</p>
                       </div>
                       <Badge variant="violet" size="sm" className="bg-violet-500/10 text-violet-400 border-violet-500/30">
                         {item.count}
@@ -409,9 +421,9 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
             </div>
           </div>
 
-          {/* Confirmation Checkbox for Permanent Deletion */}
+          {/* Single Standard Confirmation Checkbox */}
           {!preview.isBlocked && (
-            <div className="p-3 rounded-xl bg-obsidian-950/40 border border-obsidian-800/60 flex items-start gap-3">
+            <div className="p-3.5 rounded-xl bg-obsidian-950/60 border border-obsidian-800 flex items-start gap-3">
               <input
                 type="checkbox"
                 id="confirm-delete-checkbox"
@@ -421,10 +433,9 @@ export const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
               />
               <label
                 htmlFor="confirm-delete-checkbox"
-                className="text-xs text-obsidian-300 cursor-pointer select-none leading-relaxed"
+                className="text-xs text-obsidian-200 cursor-pointer select-none leading-relaxed"
               >
-                I confirm that I want to execute permanent deletion. I understand this operation is{' '}
-                <span className="text-rose-400 font-semibold">irreversible</span> and will execute atomically in CockroachDB.
+                I understand that this action is permanent and cannot be undone.
               </label>
             </div>
           )}
