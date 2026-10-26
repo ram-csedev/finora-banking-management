@@ -14,29 +14,42 @@ A relational database-based banking and loan management system developed as an a
 
 ## Table of Contents
 
+  - [Project Team](#project-team)
 - [Project Overview](#project-overview)
+  - [Core Capabilities](#core-capabilities)
 - [System Architecture](#system-architecture)
+  - [Architecture Breakdown](#architecture-breakdown)
 - [Tech Stack](#tech-stack)
 - [Key Features](#key-features)
 - [Database Design](#database-design)
   - [Entity Relationship Summary](#entity-relationship-summary)
-  - [Relational Schema & Tables](#relational-schema--tables)
+  - [Relational Schema & Tables](#relational-schema-tables)
   - [Triggers](#triggers)
   - [Stored Procedures](#stored-procedures)
   - [Database Functions](#database-functions)
   - [Dashboard Views](#dashboard-views)
-- [Transaction & Balance Logic](#transaction--balance-logic)
+- [Transaction & Balance Logic](#transaction-balance-logic)
 - [Confirmation-Based Cascading Deletion](#confirmation-based-cascading-deletion)
-  - [Key Features](#key-features-1)
+  - [Key Features](#key-features)
   - [Supported Deletion Operations](#supported-deletion-operations)
   - [Transaction Deletion and Balance Reversal](#transaction-deletion-and-balance-reversal)
   - [Error Handling and Verification](#error-handling-and-verification)
-- [Record Editing & Referential Integrity](#record-editing--referential-integrity)
-  - [Key Capabilities](#key-capabilities-1)
-  - [Supported Entities & Editable vs. Protected Fields](#supported-entities--editable-vs-protected-fields)
+- [Record Editing & Referential Integrity](#record-editing-referential-integrity)
+  - [Key Capabilities](#key-capabilities)
+  - [Supported Entities & Editable vs. Protected Fields](#supported-entities-editable-vs-protected-fields)
   - [Edit API Endpoints](#edit-api-endpoints)
 - [Sample Workflow](#sample-workflow)
 - [API Documentation](#api-documentation)
+  - [1. System & Testing](#1-system-testing)
+  - [2. Dashboard & Analytics](#2-dashboard-analytics)
+  - [3. Customer Endpoints](#3-customer-endpoints)
+  - [4. Account Endpoints](#4-account-endpoints)
+  - [5. Transaction Endpoints](#5-transaction-endpoints)
+  - [6. Loan Endpoints](#6-loan-endpoints)
+  - [7. Credit Card Endpoints](#7-credit-card-endpoints)
+  - [8. Branch & Employee Endpoints](#8-branch-employee-endpoints)
+  - [9. Nominee & Relationship Endpoints](#9-nominee-relationship-endpoints)
+  - [10. PL/SQL Tool Endpoints](#10-plsql-tool-endpoints)
 - [Frontend Overview](#frontend-overview)
 - [Project Structure](#project-structure)
 - [Local Setup Guide](#local-setup-guide)
@@ -44,13 +57,13 @@ A relational database-based banking and loan management system developed as an a
   - [Step 1: Clone the Repository](#step-1-clone-the-repository)
   - [Step 2: Database Initialization](#step-2-database-initialization)
   - [Step 3: Backend Configuration](#step-3-backend-configuration)
-  - [Step 4: Install Dependencies & Run](#step-4-install-dependencies--run)
+  - [Step 4: Install Dependencies & Run](#step-4-install-dependencies-run)
 - [Environment Variables](#environment-variables)
 - [Deployment Architecture](#deployment-architecture)
 - [Database Verification](#database-verification)
+  - [Baseline Row Counts](#baseline-row-counts)
 - [Security Considerations](#security-considerations)
 - [Academic Purpose](#academic-purpose)
-
 ---
 
 ## Project Overview
@@ -320,8 +333,6 @@ The local Oracle XE test suite reported 26 passing assertions, covering deletion
 
 ---
 
-<<<<<<< HEAD
-=======
 ## Record Editing & Referential Integrity
 
 Finora implements full record editing capabilities across all banking entities with strict referential integrity, financial-balance safeguards, and atomic multi-table synchronization.
@@ -595,7 +606,7 @@ The client interface is organized into **10 dedicated navigation views**:
 ## Project Structure
 
 ```text
-DBMS-DA/
+DBMS-DA-2/
 ├── backend/
 │   ├── server.js              # Express application, REST endpoints, and static server
 │   ├── db.js                  # Oracle database connection pool & dotenv configuration
@@ -635,7 +646,7 @@ Follow these steps to run the application locally on your workstation.
 
 ```bash
 git clone https://github.com/your-username/finora-banking-management.git
-cd finora-banking-management
+cd finora-banking-management/DBMS-DA-2
 ```
 
 ---

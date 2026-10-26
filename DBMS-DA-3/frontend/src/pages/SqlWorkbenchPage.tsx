@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Terminal,
@@ -20,14 +20,18 @@ import {
   Info,
   ChevronDown,
   ChevronRight,
+  FolderTree,
+  Key,
+  Table as TableIcon,
+  Plus,
+  RefreshCw,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { SearchInput } from '../components/ui/Input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
 import { api } from '../api/client';
-import { WorkbenchPolicy, WorkbenchQueryResult } from '../types';
+import { WorkbenchPolicy, WorkbenchQueryResult, TableMetadata, ColumnMetadata } from '../types';
 
 interface QueryTemplate {
   id: string;
@@ -107,28 +111,56 @@ ORDER BY t.trans_date DESC;`,
     sql: `SELECT 
   total_customers,
   total_accounts,
-  total_deposits,
-  total_active_loans,
+  total_balance AS total_deposits,
+  total_loans AS total_active_loans,
   total_loan_amount,
   total_credit_cards,
-  total_transactions_logged
+  total_transactions AS total_transactions_logged
 FROM dashboard_summary;`,
   },
   {
     id: 'customer_financial_summary',
     title: 'Customer Dashboard Analytical Aggregates',
     category: 'Views',
-    description: 'Multi-table customer aggregated view (accounts, loans, credit cards)',
-    sql: `SELECT 
-  cid,
-  first_name || ' ' || COALESCE(last_name, '') AS customer_name,
-  city,
-  total_accounts,
-  net_account_balance,
-  total_loans,
-  total_loan_liability,
-  total_credit_cards
-FROM customer_dashboard
+    description: 'Multi-table customer aggregated view CTE (accounts, loans, credit cards)',
+    sql: `WITH customer_accounts AS (
+  SELECT 
+    ah.cid,
+    COUNT(DISTINCT a.acc_id) AS total_accounts,
+    COALESCE(SUM(a.balance), 0) AS net_account_balance
+  FROM account_holder ah
+  JOIN account a ON ah.acc_id = a.acc_id
+  GROUP BY ah.cid
+),
+customer_loans AS (
+  SELECT 
+    cid,
+    COUNT(l_id) AS total_loans,
+    COALESCE(SUM(amount), 0) AS total_loan_liability
+  FROM loan
+  WHERE status IN ('ACTIVE', 'PENDING', 'APPROVED')
+  GROUP BY cid
+),
+customer_cards AS (
+  SELECT 
+    cid,
+    COUNT(pno) AS total_credit_cards
+  FROM creditcard
+  GROUP BY cid
+)
+SELECT 
+  c.cid,
+  c.first_name || ' ' || COALESCE(c.last_name, '') AS customer_name,
+  c.city,
+  COALESCE(ca.total_accounts, 0) AS total_accounts,
+  COALESCE(ca.net_account_balance, 0.00) AS net_account_balance,
+  COALESCE(cl.total_loans, 0) AS total_loans,
+  COALESCE(cl.total_loan_liability, 0.00) AS total_loan_liability,
+  COALESCE(cc.total_credit_cards, 0) AS total_credit_cards
+FROM customer c
+LEFT JOIN customer_accounts ca ON c.cid = ca.cid
+LEFT JOIN customer_loans cl ON c.cid = cl.cid
+LEFT JOIN customer_cards cc ON c.cid = cc.cid
 ORDER BY net_account_balance DESC
 LIMIT 10;`,
   },
@@ -139,14 +171,60 @@ LIMIT 10;`,
     description: 'Queries append-only security logs for recent database operations',
     sql: `SELECT 
   log_id, 
-  event_timestamp, 
+  created_at AS event_timestamp, 
   actor_type, 
+  actor_id,
   action, 
   entity_name, 
-  status, 
+  entity_id,
+  ip_address,
   details
 FROM audit_log
-ORDER BY event_timestamp DESC
+ORDER BY created_at DESC
+LIMIT 20;`,
+  },
+  {
+    id: 'loan_portfolio_overview',
+    title: 'Loan Portfolio & Repayment Performance',
+    category: 'Joins',
+    description: 'Comprehensive cross-table analysis of credit liabilities and servicing',
+    sql: `SELECT 
+  l.l_id,
+  l.l_type,
+  l.amount AS sanctioned_amount,
+  l.interest AS interest_rate_pct,
+  l.term AS tenure_months,
+  l.status AS loan_status,
+  c.first_name || ' ' || COALESCE(c.last_name, '') AS borrower_name,
+  COALESCE(COUNT(lp.payment_id), 0) AS total_installments_paid,
+  COALESCE(SUM(lp.principal_amount), 0) AS total_principal_repaid,
+  COALESCE(SUM(lp.interest_amount), 0) AS total_interest_serviced
+FROM loan l
+JOIN customer c ON l.cid = c.cid
+LEFT JOIN loan_payment lp ON l.l_id = lp.l_id
+GROUP BY l.l_id, l.l_type, l.amount, l.interest, l.term, l.status, c.first_name, c.last_name
+ORDER BY l.amount DESC
+LIMIT 15;`,
+  },
+  {
+    id: 'interbank_transfers',
+    title: 'High-Value Transfer Ledger & Counterparties',
+    category: 'Audit',
+    description: 'Bilateral transaction ledger tracking transfers and servicing employees',
+    sql: `SELECT 
+  t.t_id,
+  t.trans_date,
+  t.amount,
+  t.mode,
+  t.status,
+  t.acc_id AS source_account,
+  t.related_acc_id AS counterparty_account,
+  t.description,
+  concat(e.first_name, ' ', COALESCE(e.last_name, '')) AS processed_by
+FROM "transaction" t
+LEFT JOIN employee e ON t.processed_by_emp_id = e.emp_id
+WHERE t.type = 'TRANSFER' OR t.amount >= 25000.00
+ORDER BY t.trans_date DESC
 LIMIT 20;`,
   },
   {
@@ -161,7 +239,8 @@ DROP TABLE customer;`,
 ];
 
 export const SqlWorkbenchPage: React.FC = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Query state (supports ?query=... from other pages)
   const queryParam = searchParams.get('query');
@@ -181,6 +260,15 @@ export const SqlWorkbenchPage: React.FC = () => {
   const [resultSearch, setResultSearch] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Schema Explorer state
+  const [showSchemaExplorer, setShowSchemaExplorer] = useState(false);
+  const [schemaTables, setSchemaTables] = useState<TableMetadata[]>([]);
+  const [isLoadingTables, setIsLoadingTables] = useState(false);
+  const [tableFilter, setTableFilter] = useState('');
+  const [expandedTable, setExpandedTable] = useState<string | null>(null);
+  const [tableColumnsMap, setTableColumnsMap] = useState<Record<string, ColumnMetadata[]>>({});
+  const [loadingColumns, setLoadingColumns] = useState<Record<string, boolean>>({});
+
   // Synchronize incoming ?query= param
   useEffect(() => {
     if (queryParam) {
@@ -196,6 +284,75 @@ export const SqlWorkbenchPage: React.FC = () => {
       })
       .catch((err) => console.error('Failed to load workbench policy:', err));
   }, []);
+
+  // Fetch schema tables when explorer is opened
+  const loadSchemaTables = useCallback(async () => {
+    setIsLoadingTables(true);
+    try {
+      const res = await api.getMetadataTables();
+      if (res.success && Array.isArray(res.data)) {
+        setSchemaTables(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load database schema tables:', err);
+    } finally {
+      setIsLoadingTables(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showSchemaExplorer && schemaTables.length === 0) {
+      loadSchemaTables();
+    }
+  }, [showSchemaExplorer, schemaTables.length, loadSchemaTables]);
+
+  // Fetch columns for a specific table
+  const handleToggleTable = async (tableName: string) => {
+    if (expandedTable === tableName) {
+      setExpandedTable(null);
+      return;
+    }
+    setExpandedTable(tableName);
+
+    if (!tableColumnsMap[tableName]) {
+      setLoadingColumns((prev) => ({ ...prev, [tableName]: true }));
+      try {
+        const res = await api.getMetadataColumns(tableName);
+        if (res.success && Array.isArray(res.data)) {
+          setTableColumnsMap((prev) => ({ ...prev, [tableName]: res.data }));
+        }
+      } catch (err) {
+        console.error(`Failed to load columns for table ${tableName}:`, err);
+      } finally {
+        setLoadingColumns((prev) => ({ ...prev, [tableName]: false }));
+      }
+    }
+  };
+
+  // Helper to insert snippet into editor at cursor
+  const insertTextAtCursor = (text: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setQuery((prev) => (prev ? `${prev} ${text}` : text));
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextQuery = query.substring(0, start) + text + query.substring(end);
+    setQuery(nextQuery);
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + text.length, start + text.length);
+    }, 0);
+  };
+
+  // Quick query table snippet
+  const handleQueryTable = (tableName: string) => {
+    const tableSql = `SELECT * FROM ${tableName.includes(' ') || tableName === 'transaction' ? `"${tableName}"` : tableName} LIMIT 25;`;
+    setQuery(tableSql);
+    setExecutionError(null);
+    setResult(null);
+  };
 
   // Execute query handler
   const handleExecute = useCallback(async () => {
@@ -245,7 +402,7 @@ export const SqlWorkbenchPage: React.FC = () => {
   };
 
   const handleFormat = () => {
-    // Basic multi-line indentation formatter
+    // Multi-line indentation formatter for SQL
     const formatted = query
       .replace(/\s+/g, ' ')
       .replace(/\s*(FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN)\s*/gi, '\n$1 ')
@@ -259,10 +416,21 @@ export const SqlWorkbenchPage: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Dynamic fields list: uses result.fields or falls back to keys of first data object
+  const displayFields = useMemo(() => {
+    if (result?.fields && result.fields.length > 0) {
+      return result.fields.map((f) => f.name);
+    }
+    if (result?.data && result.data.length > 0) {
+      return Object.keys(result.data[0]);
+    }
+    return [];
+  }, [result]);
+
   // Export Results to CSV
   const handleDownloadCsv = () => {
     if (!result || !result.data || result.data.length === 0) return;
-    const headers = result.fields.map((f) => f.name);
+    const headers = displayFields;
     const csvRows = [headers.join(',')];
 
     result.data.forEach((row) => {
@@ -300,6 +468,43 @@ export const SqlWorkbenchPage: React.FC = () => {
     return query.trim().toUpperCase().startsWith('EXPLAIN');
   }, [query]);
 
+  // Filtered schema tables
+  const filteredSchemaTables = useMemo(() => {
+    if (!tableFilter.trim()) return schemaTables;
+    const s = tableFilter.toLowerCase();
+    return schemaTables.filter((t) => t.tableName.toLowerCase().includes(s));
+  }, [schemaTables, tableFilter]);
+
+  // Render individual cell with support for JSON objects, numbers, booleans, and nulls
+  const renderCellValue = (val: any) => {
+    if (val === null || val === undefined) {
+      return <span className="text-obsidian-600 italic">NULL</span>;
+    }
+    if (typeof val === 'boolean') {
+      return (
+        <Badge variant={val ? 'emerald' : 'slate'} size="xs">
+          {val ? 'TRUE' : 'FALSE'}
+        </Badge>
+      );
+    }
+    if (typeof val === 'number') {
+      return <span className="text-amber-300 font-mono">{val}</span>;
+    }
+    if (typeof val === 'object') {
+      const jsonStr = JSON.stringify(val);
+      return (
+        <span
+          className="font-mono text-[11px] text-cyan-300 bg-obsidian-900/90 px-2 py-0.5 rounded border border-cyan-500/20 max-w-xs truncate inline-block cursor-pointer hover:border-cyan-400 hover:text-cyan-200 transition-colors"
+          title={`${JSON.stringify(val, null, 2)}\n(Click to copy JSON)`}
+          onClick={() => navigator.clipboard.writeText(JSON.stringify(val, null, 2))}
+        >
+          {jsonStr}
+        </span>
+      );
+    }
+    return <span>{String(val)}</span>;
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Top Banner */}
@@ -310,11 +515,18 @@ export const SqlWorkbenchPage: React.FC = () => {
             CockroachDB SQL Query Workbench
           </h2>
           <p className="text-xs text-obsidian-400 mt-1">
-            Execute guarded read-only queries with CockroachDB cost-based EXPLAIN plans, statement timeouts, and row caps
+            Execute guarded read-only queries with CockroachDB cost-based EXPLAIN plans, statement timeouts, and schema discovery
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant="cyan" size="sm">Phase 5C Active</Badge>
+          <Button
+            variant={showSchemaExplorer ? 'primary' : 'outline'}
+            size="sm"
+            icon={<FolderTree className="w-4 h-4 text-cyan-400" />}
+            onClick={() => setShowSchemaExplorer(!showSchemaExplorer)}
+          >
+            {showSchemaExplorer ? 'Close Schema Explorer' : 'Schema Explorer'}
+          </Button>
           <Button
             variant="primary"
             size="sm"
@@ -363,7 +575,7 @@ export const SqlWorkbenchPage: React.FC = () => {
             <div className="p-3 rounded-lg bg-obsidian-900 border border-emerald-500/20 space-y-1">
               <span className="text-emerald-400 font-semibold block">Permitted Operations:</span>
               <p className="text-obsidian-300 text-[11px]">
-                {policy?.allowedOperations.join(', ') || 'SELECT, WITH, SHOW, EXPLAIN'}
+                {policy?.allowedOperations.join(', ') || 'SELECT, WITH (read-only), SHOW, EXPLAIN, TABLE'}
               </p>
             </div>
             <div className="p-3 rounded-lg bg-obsidian-900 border border-rose-500/20 space-y-1">
@@ -376,11 +588,11 @@ export const SqlWorkbenchPage: React.FC = () => {
         </div>
       )}
 
-      {/* Query Template Pills */}
+      {/* Pre-loaded Query Templates */}
       <div className="space-y-2">
         <div className="text-[11px] font-mono uppercase tracking-wider text-obsidian-400 flex items-center gap-1.5">
           <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-          Pre-Loaded Banking Templates
+          Pre-Loaded Banking Templates ({QUERY_TEMPLATES.length})
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           {QUERY_TEMPLATES.map((tpl) => (
@@ -388,66 +600,226 @@ export const SqlWorkbenchPage: React.FC = () => {
               key={tpl.id}
               onClick={() => handleSelectTemplate(tpl)}
               className="px-3 py-1.5 rounded-lg bg-obsidian-900 hover:bg-obsidian-800 border border-obsidian-800 hover:border-cyan-500/30 text-xs font-mono text-obsidian-300 hover:text-white transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5"
+              title={`${tpl.category}: ${tpl.description}`}
             >
               <FileCode className="w-3 h-3 text-cyan-400" />
-              {tpl.title}
+              <span>{tpl.title}</span>
+              <span className="text-[10px] text-obsidian-500 font-sans">({tpl.category})</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* SQL Editor Area */}
-      <Card className="overflow-hidden border-obsidian-800">
-        <CardHeader className="py-2.5 px-4 bg-obsidian-900/80 border-b border-obsidian-800 flex flex-row items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Terminal className="w-4 h-4 text-cyan-400" />
-            <CardTitle className="font-mono text-xs">SQL Editor Sandbox</CardTitle>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="xs"
-              icon={copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              onClick={handleCopyQuery}
-            >
-              {copied ? 'Copied' : 'Copy'}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              icon={<RotateCcw className="w-3.5 h-3.5" />}
-              onClick={handleFormat}
-            >
-              Format
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={handleClear}
-            >
-              Clear
-            </Button>
-          </div>
-        </CardHeader>
+      {/* Main Workspace Layout (Editor + Optional Schema Explorer) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Drawer / Panel: Interactive Schema Explorer */}
+        {showSchemaExplorer && (
+          <div className="lg:col-span-4 w-full">
+            <Card className="border-obsidian-800 overflow-hidden shadow-lg animate-in slide-in-from-left duration-200">
+              <CardHeader className="py-2.5 px-3 bg-obsidian-900/90 border-b border-obsidian-800 flex flex-row items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-cyan-400" />
+                  <CardTitle className="font-mono text-xs">CockroachDB Schema Explorer</CardTitle>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={<RefreshCw className={`w-3 h-3 ${isLoadingTables ? 'animate-spin' : ''}`} />}
+                  onClick={loadSchemaTables}
+                  title="Reload Schema"
+                />
+              </CardHeader>
 
-        {/* Textarea Code Box */}
-        <div className="relative bg-obsidian-950 p-4">
-          <textarea
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Write a read-only query (SELECT, WITH, SHOW, EXPLAIN)..."
-            className="w-full bg-transparent resize-y min-h-[160px] font-mono text-xs text-emerald-300/90 leading-relaxed focus:outline-none placeholder:text-obsidian-600"
-            spellCheck={false}
-          />
-        </div>
+              <div className="p-2 border-b border-obsidian-800 bg-obsidian-950/60">
+                <SearchInput
+                  placeholder="Filter tables & views..."
+                  value={tableFilter}
+                  onChange={(e) => setTableFilter(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
 
-        {/* Editor Footer Status */}
-        <div className="py-2 px-4 bg-obsidian-900/60 border-t border-obsidian-800 flex items-center justify-between text-[11px] font-mono text-obsidian-400">
-          <span>Press <kbd className="px-1.5 py-0.5 rounded bg-obsidian-800 text-cyan-300">Ctrl + Enter</kbd> to execute</span>
-          <span>CockroachDB Engine: <code className="text-cyan-400">v26.2.7</code></span>
+              <div className="max-h-[520px] overflow-y-auto divide-y divide-obsidian-800/60 bg-obsidian-950">
+                {isLoadingTables ? (
+                  <div className="p-6 text-center text-xs text-obsidian-400 flex items-center justify-center gap-2">
+                    <RefreshCw className="w-4 h-4 animate-spin text-cyan-400" />
+                    Discovering catalog objects...
+                  </div>
+                ) : filteredSchemaTables.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-obsidian-500">
+                    No matching database objects found.
+                  </div>
+                ) : (
+                  filteredSchemaTables.map((tbl) => {
+                    const isExpanded = expandedTable === tbl.tableName;
+                    const columns = tableColumnsMap[tbl.tableName] || [];
+                    const isColsLoading = loadingColumns[tbl.tableName];
+
+                    return (
+                      <div key={tbl.tableName} className="group transition-colors">
+                        {/* Table Header Row */}
+                        <div className="flex items-center justify-between px-3 py-2 hover:bg-obsidian-900/60 transition-colors">
+                          <button
+                            onClick={() => handleToggleTable(tbl.tableName)}
+                            className="flex items-center gap-2 text-left flex-1 min-w-0"
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5 text-obsidian-500 group-hover:text-cyan-400 shrink-0" />
+                            )}
+                            <TableIcon className="w-3.5 h-3.5 text-obsidian-400 shrink-0" />
+                            <span className="font-mono text-xs text-obsidian-200 group-hover:text-white truncate">
+                              {tbl.tableName}
+                            </span>
+                            <Badge
+                              variant={tbl.tableType === 'VIEW' ? 'violet' : 'slate'}
+                              size="xs"
+                              className="text-[9px] px-1 py-0 shrink-0"
+                            >
+                              {tbl.tableType === 'VIEW' ? 'VIEW' : 'TABLE'}
+                            </Badge>
+                          </button>
+
+                          {/* Quick Actions */}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => insertTextAtCursor(tbl.tableName)}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-mono text-cyan-400 hover:bg-cyan-500/10 border border-cyan-500/20"
+                              title="Insert table name into query"
+                            >
+                              +Name
+                            </button>
+                            <button
+                              onClick={() => handleQueryTable(tbl.tableName)}
+                              className="px-1.5 py-0.5 rounded text-[10px] font-mono text-emerald-400 hover:bg-emerald-500/10 border border-emerald-500/20"
+                              title="Generate SELECT * query"
+                            >
+                              SELECT
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Expanded Column Details */}
+                        {isExpanded && (
+                          <div className="bg-obsidian-900/40 px-4 py-2 border-t border-b border-obsidian-800/80 space-y-1.5 text-xs animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between text-[10px] font-mono text-obsidian-400 pb-1 border-b border-obsidian-800/60">
+                              <span>COLUMNS ({tbl.columnCount || columns.length})</span>
+                              <span>{tbl.rowCount >= 0 ? `~${tbl.rowCount} rows` : ''}</span>
+                            </div>
+
+                            {isColsLoading ? (
+                              <div className="py-2 text-[11px] text-obsidian-500 flex items-center gap-2">
+                                <RefreshCw className="w-3 h-3 animate-spin text-cyan-400" />
+                                Loading columns...
+                              </div>
+                            ) : columns.length === 0 ? (
+                              <div className="py-1 text-[11px] text-obsidian-500">No columns reported</div>
+                            ) : (
+                              <div className="space-y-1 pt-1">
+                                {columns.map((col) => (
+                                  <div
+                                    key={col.column_name}
+                                    className="flex items-center justify-between font-mono text-[11px] py-0.5 hover:bg-obsidian-800/40 rounded px-1 group/col cursor-pointer"
+                                    onClick={() => insertTextAtCursor(col.column_name)}
+                                    title={`Click to insert "${col.column_name}" into editor`}
+                                  >
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      {col.is_primary_key ? (
+                                        <Key className="w-3 h-3 text-amber-400 shrink-0" />
+                                      ) : col.is_foreign_key ? (
+                                        <Layers className="w-3 h-3 text-indigo-400 shrink-0" />
+                                      ) : (
+                                        <span className="w-3 h-3 inline-block" />
+                                      )}
+                                      <span className="text-obsidian-300 group-hover/col:text-cyan-300 truncate">
+                                        {col.column_name}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 text-[10px] text-obsidian-500">
+                                      <span className="truncate max-w-[80px]">{col.data_type}</span>
+                                      {col.is_primary_key && (
+                                        <span className="text-[9px] px-1 rounded bg-amber-500/20 text-amber-300 font-bold">
+                                          PK
+                                        </span>
+                                      )}
+                                      {col.is_foreign_key && (
+                                        <span className="text-[9px] px-1 rounded bg-indigo-500/20 text-indigo-300">
+                                          FK
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Right Section / Full Width: SQL Editor Area */}
+        <div className={showSchemaExplorer ? 'lg:col-span-8 w-full' : 'lg:col-span-12 w-full'}>
+          <Card className="overflow-hidden border-obsidian-800">
+            <CardHeader className="py-2.5 px-4 bg-obsidian-900/80 border-b border-obsidian-800 flex flex-row items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-cyan-400" />
+                <CardTitle className="font-mono text-xs">SQL Editor Sandbox</CardTitle>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  onClick={handleCopyQuery}
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  icon={<RotateCcw className="w-3.5 h-3.5" />}
+                  onClick={handleFormat}
+                >
+                  Format
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={handleClear}
+                >
+                  Clear
+                </Button>
+              </div>
+            </CardHeader>
+
+            {/* Textarea Code Box */}
+            <div className="relative bg-obsidian-950 p-4">
+              <textarea
+                ref={textareaRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Write a read-only query (SELECT, WITH, SHOW, EXPLAIN)..."
+                className="w-full bg-transparent resize-y min-h-[170px] font-mono text-xs text-emerald-300/90 leading-relaxed focus:outline-none placeholder:text-obsidian-600"
+                spellCheck={false}
+              />
+            </div>
+
+            {/* Editor Footer Status */}
+            <div className="py-2 px-4 bg-obsidian-900/60 border-t border-obsidian-800 flex items-center justify-between text-[11px] font-mono text-obsidian-400">
+              <span>Press <kbd className="px-1.5 py-0.5 rounded bg-obsidian-800 text-cyan-300">Ctrl + Enter</kbd> to execute</span>
+              <span>CockroachDB Engine: <code className="text-cyan-400">v26.2.7</code></span>
+            </div>
+          </Card>
         </div>
-      </Card>
+      </div>
 
       {/* Execution Error Banner */}
       {executionError && (
@@ -491,7 +863,7 @@ export const SqlWorkbenchPage: React.FC = () => {
                     )}
                   </div>
                   <CardDescription className="text-xs">
-                    Returned {result.returnedRows} rows &bull; {result.fields.length} columns &bull; Duration: {result.durationMs}ms
+                    Returned {result.returnedRows} rows &bull; {displayFields.length} columns &bull; Duration: {result.durationMs}ms
                   </CardDescription>
                 </div>
               </div>
@@ -572,9 +944,9 @@ export const SqlWorkbenchPage: React.FC = () => {
                     <thead className="sticky top-0 z-10 bg-obsidian-950 border-b border-obsidian-800 shadow-sm">
                       <tr>
                         <th className="py-2.5 px-3 text-[10px] text-obsidian-500 w-10">#</th>
-                        {result.fields.map((f) => (
-                          <th key={f.name} className="py-2.5 px-3 text-cyan-400 font-semibold whitespace-nowrap">
-                            {f.name}
+                        {displayFields.map((fName) => (
+                          <th key={fName} className="py-2.5 px-3 text-cyan-400 font-semibold whitespace-nowrap">
+                            {fName}
                           </th>
                         ))}
                       </tr>
@@ -583,24 +955,11 @@ export const SqlWorkbenchPage: React.FC = () => {
                       {filteredRows.map((row, rowIdx) => (
                         <tr key={rowIdx} className="hover:bg-obsidian-850/60 transition-colors">
                           <td className="py-2 px-3 text-[10px] text-obsidian-600">{rowIdx + 1}</td>
-                          {result.fields.map((f) => {
-                            const val = row[f.name];
-                            return (
-                              <td key={f.name} className="py-2 px-3 whitespace-nowrap text-obsidian-200">
-                                {val === null || val === undefined ? (
-                                  <span className="text-obsidian-600 italic">NULL</span>
-                                ) : typeof val === 'boolean' ? (
-                                  <Badge variant={val ? 'emerald' : 'slate'} size="xs">
-                                    {val ? 'TRUE' : 'FALSE'}
-                                  </Badge>
-                                ) : typeof val === 'number' ? (
-                                  <span className="text-amber-300 font-mono">{val}</span>
-                                ) : (
-                                  <span>{String(val)}</span>
-                                )}
-                              </td>
-                            );
-                          })}
+                          {displayFields.map((fName) => (
+                            <td key={fName} className="py-2 px-3 whitespace-nowrap text-obsidian-200">
+                              {renderCellValue(row[fName])}
+                            </td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>

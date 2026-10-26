@@ -94,6 +94,7 @@ export const CustomersPage: React.FC = () => {
   });
   const [isSubmittingBeneficiary, setIsSubmittingBeneficiary] = useState(false);
   const [beneficiaryError, setBeneficiaryError] = useState<string | null>(null);
+  const [drawerError, setDrawerError] = useState<string | null>(null);
 
   // Form State: Create
   const [createForm, setCreateForm] = useState({

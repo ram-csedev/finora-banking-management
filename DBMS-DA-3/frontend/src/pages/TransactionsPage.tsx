@@ -276,8 +276,8 @@ export const TransactionsPage: React.FC = () => {
   };
 
   const getTxColor = (type: string) => {
-    if (type === 'DEPOSIT' || type === 'TRANSFER_IN' || type === 'INTEREST_CREDIT') return 'emerald';
-    if (type === 'WITHDRAWAL' || type === 'TRANSFER_OUT' || type === 'FEE_DEBIT') return 'rose';
+    if (type === 'DEPOSIT' || type === 'TRANSFER_IN' || type === 'INTEREST_CREDIT' || type === 'INTEREST') return 'emerald';
+    if (type === 'WITHDRAWAL' || type === 'TRANSFER_OUT' || type === 'FEE_DEBIT' || type === 'FEE') return 'rose';
     return 'cyan';
   };
 

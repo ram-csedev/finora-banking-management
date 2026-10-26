@@ -17,8 +17,8 @@ router.get('/raft-state', (req, res) => {
 
 // Update simulator state
 router.post('/raft-state', (req, res) => {
-  const { node1Up, node2Up, node3Up, raftLeader } = req.body || {};
-  const updated = raftService.updateState({ node1Up, node2Up, node3Up, raftLeader });
+  const { node1Up, node2Up, node3Up, raftLeader, ranges, splitHappened, rangeSizeMb } = req.body || {};
+  const updated = raftService.updateState({ node1Up, node2Up, node3Up, raftLeader, ranges, splitHappened, rangeSizeMb });
   res.json({
     success: true,
     data: updated

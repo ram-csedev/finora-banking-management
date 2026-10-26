@@ -19,6 +19,8 @@ import {
   ChevronRight,
   Sparkles,
   Info,
+  Crown,
+  Radio,
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
@@ -35,7 +37,7 @@ export const CockroachShowcasePage: React.FC = () => {
   // Active Interactive Simulator Tab
   const [activeSim, setActiveSim] = useState<'raft' | 'range' | 'serializable'>('raft');
 
-  // Simulator 1: Raft Consensus State (Shared context persisting across navigation)
+  // Shared Architectural Simulator Context (persists across navigation)
   const {
     node1Up,
     node2Up,
@@ -44,16 +46,17 @@ export const CockroachShowcasePage: React.FC = () => {
     raftLog,
     activeNodesCount,
     hasQuorum,
+    nodes,
+    ranges,
+    rangeSizeMb,
+    splitHappened,
+    recoveringNodeId,
     toggleNode,
+    ingestRangeData,
     resetRaftSim,
+    resetRangeSim,
+    resetAllSims,
   } = useRaftSimulator();
-
-  // Simulator 2: Range Partitioning & Split State
-  const [rangeSizeMb, setRangeSizeMb] = useState<number>(24);
-  const [ranges, setRanges] = useState<{ id: string; span: string; size: number; node: number }[]>([
-    { id: 'Range 1', span: '[ -∞, +∞ )', size: 24, node: 1 },
-  ]);
-  const [splitHappened, setSplitHappened] = useState(false);
 
   // Simulator 3: Serializable SSI & 40001 Retry State
   const [ssiStep, setSsiStep] = useState<number>(0);
@@ -76,28 +79,6 @@ export const CockroachShowcasePage: React.FC = () => {
       isMounted = false;
     };
   }, []);
-
-  // Simulator 2: Range Partitioning Logic
-  const handleIngestData = () => {
-    if (splitHappened) return;
-    const nextSize = rangeSizeMb + 20;
-    setRangeSizeMb(nextSize);
-
-    if (nextSize >= 64) {
-      // Split range
-      setSplitHappened(true);
-      setRanges([
-        { id: 'Range 1', span: '[ -∞, 100500 )', size: 34, node: 1 },
-        { id: 'Range 2', span: '[ 100500, +∞ )', size: 36, node: 2 },
-      ]);
-    }
-  };
-
-  const resetRangeSim = () => {
-    setRangeSizeMb(24);
-    setRanges([{ id: 'Range 1', span: '[ -∞, +∞ )', size: 24, node: 1 }]);
-    setSplitHappened(false);
-  };
 
   // Simulator 3: SSI Steps Walkthrough
   const ssiSteps = [
@@ -434,94 +415,288 @@ export const CockroachShowcasePage: React.FC = () => {
         {activeSim === 'raft' && (
           <Card className="border-cyan-500/20">
             <CardHeader className="border-b border-obsidian-800 pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-sm font-semibold">Multi-Raft Consensus & Node Failover Simulator</CardTitle>
                     <Badge variant="cyan" size="xs">Interactive Simulation</Badge>
                   </div>
                   <CardDescription className="text-xs mt-0.5">
-                    Toggle individual cluster nodes offline to observe heartbeat timeouts, leader re-election, and quorum availability.
+                    Toggle individual cluster nodes offline to observe heartbeat timeouts, autonomous Raft elections, and per-range quorum availability.
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="xs" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={resetRaftSim}>
-                  Reset Cluster
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="xs" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={resetRaftSim} title="Restore all 3 cluster nodes to online">
+                    Reset Cluster
+                  </Button>
+                  <Button variant="outline" size="xs" icon={<RotateCcw className="w-3.5 h-3.5 text-cyan-400" />} onClick={resetAllSims} title="Reset both nodes and ranges to initial defaults">
+                    Reset All Sims
+                  </Button>
+                </div>
               </div>
             </CardHeader>
 
             <CardContent className="space-y-6 pt-4">
-              {/* 3 Node Cluster Visual */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  { id: 1, up: node1Up, isLeader: raftLeader === 1 },
-                  { id: 2, up: node2Up, isLeader: raftLeader === 2 },
-                  { id: 3, up: node3Up, isLeader: raftLeader === 3 },
-                ].map((node) => (
-                  <div
-                    key={node.id}
-                    className={`p-4 rounded-xl border transition-all ${
-                      node.up
-                        ? node.isLeader
-                          ? 'bg-cyan-500/10 border-cyan-400 shadow-glow-cyan/20'
-                          : 'bg-obsidian-900 border-obsidian-800'
-                        : 'bg-rose-500/10 border-rose-500/30 opacity-60'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Server className={`w-4 h-4 ${node.up ? (node.isLeader ? 'text-cyan-400' : 'text-emerald-400') : 'text-rose-400'}`} />
-                        <span className="font-mono text-sm font-bold text-white">Node {node.id}</span>
-                      </div>
-                      <Badge variant={node.up ? (node.isLeader ? 'cyan' : 'emerald') : 'rose'} size="xs">
-                        {node.up ? (node.isLeader ? 'RAFT LEADER' : 'FOLLOWER') : 'OFFLINE'}
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-1.5 font-mono text-[11px] text-obsidian-300">
-                      <div>Role: {node.up ? (node.isLeader ? 'Leaseholder + Leader' : 'Raft Replicated Follower') : 'Unreachable'}</div>
-                      <div>Raft Log: {node.up ? 'In Sync (Index 1042)' : 'Stalled'}</div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-obsidian-800 flex items-center justify-between">
-                      <span className="text-[10px] text-obsidian-400">
-                        {node.up ? 'Active in Quorum' : 'Failed heartbeat'}
-                      </span>
-                      <Button
-                        variant={node.up ? 'danger' : 'outline'}
-                        size="xs"
-                        onClick={() => toggleNode(node.id)}
-                      >
-                        {node.up ? 'Kill Node' : 'Start Node'}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+              {/* Architecture Terminology Callout */}
+              <div className="p-3 rounded-xl bg-obsidian-950/70 border border-obsidian-800 flex items-start gap-2.5 text-xs text-obsidian-300">
+                <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div className="leading-relaxed">
+                  <span className="font-semibold text-white">Multi-Raft Shared-Nothing Architecture:</span> A CockroachDB node is an independent process that can host replicas of many ranges across the keyspace. Each range runs its own independent Raft consensus group with its own leader leaseholder. Nodes are not limited to single ranges.
+                </div>
               </div>
 
-              {/* Quorum Status Bar */}
-              <div className={`p-4 rounded-xl border flex items-center justify-between ${
-                hasQuorum
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
-              }`}>
+              {/* 3 Node Cluster Visual */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {nodes.map((node) => {
+                  const isRecovering = node.status === 'RECOVERING';
+                  const isOnline = node.status === 'ONLINE';
+                  const isOffline = node.status === 'OFFLINE';
+                  const hostsAnyLeader = node.hostedReplicas.some((r) => r.role === 'LEADER' && isOnline);
+
+                  return (
+                    <div
+                      key={node.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        isOnline
+                          ? hostsAnyLeader
+                            ? 'bg-cyan-500/10 border-cyan-400/60 shadow-glow-cyan/20'
+                            : 'bg-obsidian-900 border-obsidian-800'
+                          : isRecovering
+                          ? 'bg-amber-500/10 border-amber-500/40 shadow-glow-amber/10'
+                          : 'bg-rose-500/10 border-rose-500/30 opacity-70'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Server
+                            className={`w-4 h-4 ${
+                              isOnline ? (hostsAnyLeader ? 'text-cyan-400' : 'text-emerald-400') : isRecovering ? 'text-amber-400 animate-spin' : 'text-rose-400'
+                            }`}
+                          />
+                          <span className="font-mono text-sm font-bold text-white">{node.name}</span>
+                        </div>
+                        <Badge
+                          variant={isOnline ? (hostsAnyLeader ? 'cyan' : 'emerald') : isRecovering ? 'amber' : 'rose'}
+                          size="xs"
+                        >
+                          {isOnline ? 'ONLINE' : isRecovering ? 'RECOVERING' : 'OFFLINE'}
+                        </Badge>
+                      </div>
+
+                      {/* Replication Progress */}
+                      <div className="space-y-1.5 font-mono text-[11px] text-obsidian-300">
+                        <div className="flex items-center justify-between">
+                          <span className="text-obsidian-400">Replication Log:</span>
+                          <span
+                            className={
+                              node.logProgress === 'IN_SYNC'
+                                ? 'text-emerald-400 font-semibold'
+                                : node.logProgress === 'CATCHING_UP'
+                                ? 'text-amber-400 font-semibold animate-pulse'
+                                : 'text-rose-400 font-semibold'
+                            }
+                          >
+                            {node.logProgress === 'IN_SYNC'
+                              ? 'In Sync (Committed)'
+                              : node.logProgress === 'CATCHING_UP'
+                              ? 'Replaying Log...'
+                              : 'Stalled / Unreachable'}
+                          </span>
+                        </div>
+
+                        {/* Hosted Range Replicas */}
+                        <div className="pt-2 border-t border-obsidian-800/80 space-y-1">
+                          <div className="text-[10px] uppercase font-mono text-obsidian-500">
+                            Hosted Range Replicas:
+                          </div>
+                          {node.hostedReplicas.length === 0 ? (
+                            <div className="text-obsidian-500 text-[11px]">No active replicas</div>
+                          ) : (
+                            node.hostedReplicas.map((rep) => (
+                              <div
+                                key={rep.rangeId}
+                                className={`flex items-center justify-between px-2 py-1 rounded text-[11px] font-mono ${
+                                  isOffline
+                                    ? 'bg-obsidian-950/60 text-obsidian-500'
+                                    : rep.role === 'LEADER'
+                                    ? 'bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30'
+                                    : 'bg-obsidian-950 text-obsidian-300'
+                                }`}
+                              >
+                                <span className="flex items-center gap-1.5">
+                                  {rep.role === 'LEADER' && isOnline && <Crown className="w-3 h-3 text-cyan-400" />}
+                                  {rep.rangeName}
+                                </span>
+                                <span className="text-[10px]">
+                                  {isOffline ? 'Offline Replica' : rep.role === 'LEADER' ? 'Raft Leader' : 'Follower'}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Action Button */}
+                      <div className="mt-4 pt-3 border-t border-obsidian-800 flex items-center justify-between">
+                        <span className="text-[10px] text-obsidian-400 font-mono">
+                          {isOnline ? 'Active in Quorum' : isRecovering ? 'Catching up...' : 'Heartbeat failed'}
+                        </span>
+                        <Button
+                          variant={isOnline ? 'danger' : 'outline'}
+                          size="xs"
+                          onClick={() => toggleNode(node.id)}
+                          disabled={isRecovering}
+                          icon={isRecovering ? <RefreshCw className="w-3 h-3 animate-spin" /> : undefined}
+                        >
+                          {isOnline ? 'Kill Node' : isRecovering ? 'Catching Up...' : 'Start Node'}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Multi-Raft Range Replication & Quorum Status Panel */}
+              <div className="p-4 rounded-xl bg-obsidian-950 border border-obsidian-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="font-semibold text-xs text-white flex items-center gap-2">
+                      <Split className="w-4 h-4 text-cyan-400" />
+                      Active Key-Ranges & Multi-Raft Consensus Groups
+                    </div>
+                    <p className="text-[11px] text-obsidian-400 mt-0.5">
+                      Each range operates an autonomous Raft group requiring majority consensus (&ge; 2 of 3 replicas) to commit writes.
+                    </p>
+                  </div>
+                  {ranges.length === 1 && (
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      onClick={() => setActiveSim('range')}
+                      icon={<ArrowRight className="w-3.5 h-3.5" />}
+                    >
+                      Split to 2 Ranges in Tab 2
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  {ranges.map((range) => {
+                    const isQuorumHealthy = range.quorumStatus === 'QUORUM_HEALTHY';
+                    const hasLeader = range.leaderNodeId !== null;
+
+                    return (
+                      <div
+                        key={range.id}
+                        className={`p-3.5 rounded-xl border space-y-2.5 font-mono text-xs ${
+                          isQuorumHealthy
+                            ? 'bg-obsidian-900 border-obsidian-800'
+                            : 'bg-rose-950/20 border-rose-500/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-white flex items-center gap-1.5">
+                            <Radio className="w-3.5 h-3.5 text-cyan-400" />
+                            {range.name}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant={isQuorumHealthy ? 'emerald' : 'rose'} size="xs">
+                              {range.quorumStatus}
+                            </Badge>
+                            <Badge variant={range.writeStatus === 'WRITES_AVAILABLE' ? 'emerald' : 'rose'} size="xs">
+                              {range.writeStatus}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1 text-[11px]">
+                          <div className="text-cyan-300">
+                            Key Span: <span className="font-semibold">{range.keySpan}</span> &bull; {range.sizeMb} MB
+                          </div>
+                          <div className="text-obsidian-300 flex items-center gap-2">
+                            <span>Current Leader:</span>
+                            {hasLeader ? (
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30 flex items-center gap-1">
+                                <Crown className="w-3 h-3 text-cyan-400" />
+                                Node {range.leaderNodeId}
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold border border-rose-500/30">
+                                None (Quorum Lost)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Replica Placement Indicator */}
+                        <div className="pt-2 border-t border-obsidian-800 flex items-center justify-between text-[11px]">
+                          <span className="text-obsidian-400">Replica Placement:</span>
+                          <div className="flex items-center gap-2">
+                            {range.replicas.map((nodeId) => {
+                              const rNode = nodes.find((n) => n.id === nodeId);
+                              const isRepUp = rNode?.status === 'ONLINE';
+                              const isRepRec = rNode?.status === 'RECOVERING';
+                              const isLeader = range.leaderNodeId === nodeId && isRepUp;
+
+                              return (
+                                <span
+                                  key={nodeId}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-mono flex items-center gap-1 ${
+                                    isRepUp
+                                      ? isLeader
+                                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/50'
+                                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                      : isRepRec
+                                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/30 opacity-60'
+                                  }`}
+                                  title={`Node ${nodeId}: ${rNode?.status || 'UNKNOWN'}${isLeader ? ' (Leader)' : ''}`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isRepUp ? (isLeader ? 'bg-cyan-400' : 'bg-emerald-400') : isRepRec ? 'bg-amber-400 animate-pulse' : 'bg-rose-400'
+                                    }`}
+                                  />
+                                  Node {nodeId}
+                                  {isLeader && ' (L)'}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Cluster Quorum Status Bar */}
+              <div
+                className={`p-4 rounded-xl border flex items-center justify-between ${
+                  hasQuorum
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                }`}
+              >
                 <div className="flex items-center gap-3">
                   {hasQuorum ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                   ) : (
-                    <AlertOctagon className="w-5 h-5 text-rose-400" />
+                    <AlertOctagon className="w-5 h-5 text-rose-400 shrink-0" />
                   )}
                   <div>
                     <div className="font-semibold text-xs">
-                      {hasQuorum ? 'Raft Quorum Satisfied (Cluster Operational)' : 'Loss of Quorum — Safety Stall Activated'}
+                      {hasQuorum
+                        ? 'Multi-Raft Consensus Operational — Linearizable Writes Active'
+                        : 'Loss of Quorum — CockroachDB Write Safety Gate Activated'}
                     </div>
                     <div className="text-[11px] opacity-90 mt-0.5 font-mono">
-                      Active Nodes: {activeNodesCount} of 3 (Requires majority &ge; 2 votes for linearizable writes)
+                      Active Voting Nodes: {activeNodesCount} of 3 &bull; Quorum required: &ge; 2 votes majority
                     </div>
                   </div>
                 </div>
                 <Badge variant={hasQuorum ? 'emerald' : 'rose'} size="sm">
-                  {hasQuorum ? 'WRITES ENABLED' : 'WRITES STALLED'}
+                  {hasQuorum ? 'WRITES AVAILABLE' : 'WRITES STALLED'}
                 </Badge>
               </div>
 
@@ -534,7 +709,7 @@ export const CockroachShowcasePage: React.FC = () => {
                       Simulated Multi-Raft Write Gate Active
                     </div>
                     <p className="text-[11px] text-rose-200/80 leading-relaxed">
-                      With fewer than 2 voting nodes online, the CockroachDB simulation gate blocks all state-changing operations (customer creation/edit/deletion, account modifications, loan disbursements, repayments, and fund transfers) across the application. Read-only navigation remains active. Restore nodes or click <strong>Reset Cluster</strong> above to resume writes.
+                      With fewer than 2 voting nodes online, ranges cannot achieve majority consensus (⌊3/2⌋ + 1 = 2). The CockroachDB simulation gate blocks all state-changing operations (customer mutations, accounts, transfers, loans) across the application to prevent split-brain anomalies. Click <strong>Reset Cluster</strong> above to resume writes.
                     </p>
                   </div>
                 </div>
@@ -545,7 +720,7 @@ export const CockroachShowcasePage: React.FC = () => {
                 <span className="text-[11px] font-mono uppercase tracking-wider text-obsidian-400">
                   Consensus Event Log:
                 </span>
-                <div className="p-3 rounded-xl bg-obsidian-950 border border-obsidian-800 font-mono text-[11px] text-cyan-300 space-y-1">
+                <div className="p-3 rounded-xl bg-obsidian-950 border border-obsidian-800 font-mono text-[11px] text-cyan-300 space-y-1 max-h-56 overflow-y-auto">
                   {raftLog.map((log, idx) => (
                     <div key={idx} className={idx === 0 ? 'text-cyan-300 font-semibold' : 'text-obsidian-400'}>
                       &gt; {log}
@@ -561,7 +736,7 @@ export const CockroachShowcasePage: React.FC = () => {
         {activeSim === 'range' && (
           <Card className="border-cyan-500/20">
             <CardHeader className="border-b border-obsidian-800 pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-sm font-semibold">64MB Key-Range Partitioning & Auto-Split</CardTitle>
@@ -571,9 +746,14 @@ export const CockroachShowcasePage: React.FC = () => {
                     Simulate sequential transaction ingestion filling a range until it reaches CockroachDB's 64MB split threshold.
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="xs" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={resetRangeSim}>
-                  Reset Range
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="xs" icon={<RotateCcw className="w-3.5 h-3.5" />} onClick={resetRangeSim} title="Reset range to single 24 MB unsplit range">
+                    Reset Range
+                  </Button>
+                  <Button variant="outline" size="xs" icon={<RotateCcw className="w-3.5 h-3.5 text-cyan-400" />} onClick={resetAllSims} title="Reset both nodes and ranges to initial defaults">
+                    Reset All Sims
+                  </Button>
+                </div>
               </div>
             </CardHeader>
 
@@ -595,46 +775,181 @@ export const CockroachShowcasePage: React.FC = () => {
               </div>
 
               {/* Action Controls */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Button
                   variant="primary"
                   size="sm"
                   icon={<Sparkles className="w-4 h-4" />}
-                  onClick={handleIngestData}
+                  onClick={ingestRangeData}
                   disabled={splitHappened}
                 >
-                  {splitHappened ? 'Split Completed' : 'Ingest Batch (+20 MB Rows)'}
+                  {splitHappened ? 'Split Completed (64 MB Threshold Reached)' : 'Ingest Batch (+20 MB Rows)'}
                 </Button>
                 {splitHappened && (
                   <span className="text-xs font-mono text-emerald-400 flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4" />
-                    Range reached 64MB boundary! Split executed at key midpoint.
+                    Range reached 64MB boundary! Partitioned at key midpoint 100500 into Range 1 and Range 2.
                   </span>
                 )}
               </div>
 
-              {/* Splitted Ranges Display */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-mono uppercase tracking-wider text-obsidian-400">
-                  Partitioned Ranges in Cluster:
-                </span>
+              {/* Educational Explanation: Range Splitting vs Replica Rebalancing */}
+              <div className="p-3.5 rounded-xl bg-obsidian-950/80 border border-obsidian-800 space-y-1.5 text-xs text-obsidian-300">
+                <div className="flex items-center gap-2 font-semibold text-white">
+                  <Info className="w-4 h-4 text-cyan-400" />
+                  Range Splitting vs. Replica Rebalancing
+                </div>
+                <p className="text-[11px] text-obsidian-400 leading-relaxed font-sans">
+                  In CockroachDB, <strong>range splitting</strong> is a fast, local metadata operation that partitions the key-span at a key boundary (<code className="text-cyan-300 font-mono">100500</code>). Initially, both child ranges retain the parent’s configured replica placement across Nodes 1, 2, and 3. Each child range forms its own autonomous Raft group with its own leader leaseholder. <strong>Replica rebalancing</strong> (moving replicas to underutilized nodes) occurs subsequently and independently via the replicate queue.
+                </p>
+              </div>
+
+              {/* Partitioned Ranges Display */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-obsidian-400">
+                    Partitioned Key-Ranges in Cluster:
+                  </span>
+                  <span className="text-[11px] font-mono text-obsidian-400">
+                    Arithmetic: {splitHappened ? '32 MB + 32 MB = 64 MB Total' : '24 MB Initial'}
+                  </span>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {ranges.map((r) => (
-                    <div
-                      key={r.id}
-                      className="p-4 rounded-xl bg-obsidian-900 border border-cyan-500/30 space-y-2 font-mono text-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-white flex items-center gap-2">
-                          <Split className="w-4 h-4 text-cyan-400" />
-                          {r.id}
-                        </span>
-                        <Badge variant="cyan" size="xs">Node {r.node}</Badge>
+                  {ranges.map((r) => {
+                    const isQuorumHealthy = r.quorumStatus === 'QUORUM_HEALTHY';
+                    const hasLeader = r.leaderNodeId !== null;
+
+                    return (
+                      <div
+                        key={r.id}
+                        className={`p-4 rounded-xl border space-y-3 font-mono text-xs ${
+                          isQuorumHealthy
+                            ? 'bg-obsidian-900 border-cyan-500/30'
+                            : 'bg-rose-950/20 border-rose-500/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-white flex items-center gap-2">
+                            <Split className="w-4 h-4 text-cyan-400" />
+                            {r.name}
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Badge variant={isQuorumHealthy ? 'emerald' : 'rose'} size="xs">
+                              {r.quorumStatus}
+                            </Badge>
+                            <Badge variant={r.writeStatus === 'WRITES_AVAILABLE' ? 'emerald' : 'rose'} size="xs">
+                              {r.writeStatus}
+                            </Badge>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-[11px]">
+                          <div className="text-cyan-300">
+                            Key Span: <span className="font-semibold">{r.keySpan}</span>
+                          </div>
+                          <div className="text-obsidian-400">
+                            Size: <span className="text-white font-semibold">{r.sizeMb} MB</span> &bull; Status:{' '}
+                            <span className="text-cyan-400">{r.splitStatus}</span>
+                          </div>
+                          <div className="text-obsidian-300 flex items-center gap-2 pt-1">
+                            <span>Current Raft Leader:</span>
+                            {hasLeader ? (
+                              <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30 flex items-center gap-1">
+                                <Crown className="w-3 h-3 text-cyan-400" />
+                                Node {r.leaderNodeId}
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-semibold border border-rose-500/30">
+                                None (Quorum Lost)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Configured Replica Placement */}
+                        <div className="pt-2 border-t border-obsidian-800 space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-obsidian-400">Configured Replica Placement:</span>
+                            <span className="text-cyan-400 font-semibold">{r.activeReplicasCount}/3 Online</span>
+                          </div>
+                          <div className="flex items-center gap-2 pt-0.5">
+                            {r.replicas.map((nodeId) => {
+                              const rNode = nodes.find((n) => n.id === nodeId);
+                              const isRepUp = rNode?.status === 'ONLINE';
+                              const isRepRec = rNode?.status === 'RECOVERING';
+                              const isLeader = r.leaderNodeId === nodeId && isRepUp;
+
+                              return (
+                                <span
+                                  key={nodeId}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-mono flex items-center gap-1.5 ${
+                                    isRepUp
+                                      ? isLeader
+                                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-400/50'
+                                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                      : isRepRec
+                                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                                      : 'bg-rose-500/10 text-rose-400 border border-rose-500/30 opacity-60'
+                                  }`}
+                                  title={`Node ${nodeId}: ${rNode?.status || 'UNKNOWN'}${isLeader ? ' (Leader)' : ''}`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isRepUp ? (isLeader ? 'bg-cyan-400' : 'bg-emerald-400') : isRepRec ? 'bg-amber-400 animate-pulse' : 'bg-rose-400'
+                                    }`}
+                                  />
+                                  Node {nodeId}
+                                  {isLeader && ' (L)'}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-cyan-300">Key Span: {r.span}</div>
-                      <div className="text-obsidian-400">Size: {r.size} MB &bull; Rebalance Target: Underutilized Node {r.node === 1 ? 2 : 1}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Cross-Simulation Demonstration Box (Requirement 3) */}
+              <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-semibold text-xs text-cyan-300">
+                    <Zap className="w-4 h-4 text-cyan-400" />
+                    Reproducible Demonstration: Test Multi-Raft Failover on Range 2
+                  </div>
+                  <Badge variant="cyan" size="xs">Live Interactive Link</Badge>
+                </div>
+                <p className="text-[11px] text-obsidian-300 leading-relaxed font-sans">
+                  {splitHappened
+                    ? "Both Range 1 and Range 2 are active with independent Raft leaders. Toggle Node 2 below to observe how Range 1 remains unaffected with leader Node 1, while Range 2's surviving replicas (Nodes 1 & 3) immediately elect Node 3 as their new Raft leader — keeping writes available on both ranges with zero downtime!"
+                    : "Click 'Ingest Batch (+20 MB Rows)' above twice to reach the 64MB threshold and split Range 1 into two independent ranges. Then test failover on Range 2!"}
+                </p>
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  {splitHappened && (
+                    <Button
+                      variant={node2Up ? 'danger' : 'outline'}
+                      size="xs"
+                      onClick={() => toggleNode(2)}
+                      disabled={recoveringNodeId === 2}
+                      icon={recoveringNodeId === 2 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
+                    >
+                      {node2Up
+                        ? 'Kill Node 2 (Test Range 2 Failover)'
+                        : recoveringNodeId === 2
+                        ? 'Node 2 Recovering (Log Replay)...'
+                        : 'Start Node 2 (Test Log Catch-Up)'}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setActiveSim('raft')}
+                    icon={<ArrowRight className="w-3.5 h-3.5" />}
+                  >
+                    View Consensus in Tab 1 (Multi-Raft)
+                  </Button>
                 </div>
               </div>
             </CardContent>

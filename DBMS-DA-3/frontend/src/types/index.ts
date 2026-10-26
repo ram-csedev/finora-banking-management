@@ -120,12 +120,12 @@ export interface CreditCard {
 export interface Loan {
   l_id: string;
   cid: string;
-  l_type: 'HOME' | 'PERSONAL' | 'AUTO' | 'EDUCATION' | 'BUSINESS';
+  l_type: 'HOME' | 'CAR' | 'PERSONAL' | 'EDUCATION' | 'BUSINESS' | string;
   amount: string | number;
   interest: string | number;
   term: number;
   start_date: string;
-  status: 'ACTIVE' | 'PAID_OFF' | 'DEFAULTED' | 'APPLIED';
+  status: 'PENDING' | 'APPROVED' | 'ACTIVE' | 'PAID_OFF' | 'DEFAULTED' | 'REJECTED' | string;
   assigned_emp_id?: string;
 }
 
@@ -136,8 +136,8 @@ export interface LoanPayment {
   amount: string | number;
   principal_amount: string | number;
   interest_amount: string | number;
-  payment_mode: 'NEFT' | 'RTGS' | 'UPI' | 'AUTO_DEBIT' | 'CASH';
-  status: 'SUCCESS' | 'PENDING' | 'FAILED';
+  payment_mode: 'ONLINE' | 'AUTO_DEBIT' | 'CASH' | 'CHEQUE' | string;
+  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REVERSED' | string;
   remarks?: string;
 }
 
@@ -171,7 +171,7 @@ export interface ResponsibleFor {
   l_id?: string;
   t_id?: string;
   assigned_date: string;
-  status: 'ACTIVE' | 'COMPLETED' | 'REVOKED' | 'TRANSFERRED';
+  status: 'ACTIVE' | 'COMPLETED' | 'REVOKED' | string;
   notes?: string;
 }
 
@@ -179,10 +179,10 @@ export interface Transaction {
   t_id: string;
   acc_id: string;
   trans_date: string;
-  type: 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER_IN' | 'TRANSFER_OUT' | 'INTEREST_CREDIT' | 'FEE_DEBIT';
+  type: 'DEPOSIT' | 'WITHDRAWAL' | 'TRANSFER' | 'INTEREST' | 'FEE' | string;
   amount: string | number;
-  mode: 'CASH' | 'ATM' | 'NEFT' | 'RTGS' | 'UPI' | 'INTERNAL_TRANSFER' | 'CHEQUE';
-  status: 'COMPLETED' | 'PENDING' | 'FAILED' | 'REVERSED';
+  mode: 'ONLINE' | 'ATM' | 'CASH' | 'BRANCH' | 'UPI' | 'NEFT' | 'RTGS' | string;
+  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REVERSED' | string;
   related_acc_id?: string;
   related_trans_id?: string;
   description?: string;

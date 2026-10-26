@@ -25,7 +25,7 @@ function getState() {
   return { ...simulationState };
 }
 
-function updateState({ node1Up, node2Up, node3Up, raftLeader }) {
+function updateState({ node1Up, node2Up, node3Up, raftLeader, ranges, splitHappened, rangeSizeMb }) {
   const n1 = node1Up !== undefined ? Boolean(node1Up) : simulationState.node1Up;
   const n2 = node2Up !== undefined ? Boolean(node2Up) : simulationState.node2Up;
   const n3 = node3Up !== undefined ? Boolean(node3Up) : simulationState.node3Up;
@@ -52,6 +52,9 @@ function updateState({ node1Up, node2Up, node3Up, raftLeader }) {
     raftLeader: leader,
     activeNodesCount,
     hasQuorum,
+    ranges: ranges !== undefined ? ranges : simulationState.ranges,
+    splitHappened: splitHappened !== undefined ? Boolean(splitHappened) : simulationState.splitHappened,
+    rangeSizeMb: rangeSizeMb !== undefined ? Number(rangeSizeMb) : simulationState.rangeSizeMb,
     lastUpdated: new Date().toISOString()
   };
 

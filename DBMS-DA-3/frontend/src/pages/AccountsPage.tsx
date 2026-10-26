@@ -110,6 +110,7 @@ export const AccountsPage: React.FC = () => {
   });
   const [isSubmittingNominee, setIsSubmittingNominee] = useState(false);
   const [nomineeError, setNomineeError] = useState<string | null>(null);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
 
   // Delete State
   const [isDeleting, setIsDeleting] = useState(false);

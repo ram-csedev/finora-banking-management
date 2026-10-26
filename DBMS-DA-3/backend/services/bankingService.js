@@ -11,13 +11,18 @@ const { recordAudit } = require('./auditService');
  * Atomic Deposit
  */
 async function processDeposit({ acc_id, amount, mode = 'ONLINE', description = null, emp_id = null, ipAddress = null }) {
+  const depositMode = String(mode || 'ONLINE').trim().toUpperCase();
+  const validModes = ['ONLINE', 'ATM', 'CASH', 'BRANCH', 'UPI', 'NEFT', 'RTGS'];
+  if (!validModes.includes(depositMode)) {
+    throw new AppError('Invalid transaction channel. Select Online, ATM, Cash, Branch, UPI, NEFT, or RTGS.', 400, null, 'INVALID_TRANSACTION_MODE', 'mode');
+  }
   const depositAmount = parseFloat(amount);
   if (isNaN(depositAmount) || depositAmount <= 0) {
     throw new AppError('Deposit amount must be a positive number.', 400);
   }
 
-  const accountId = parseInt(acc_id, 10);
-  if (isNaN(accountId)) {
+  const accountId = String(acc_id).trim();
+  if (!/^\d+$/.test(accountId)) {
     throw new AppError('Invalid account ID format.', 400);
   }
 
@@ -49,12 +54,12 @@ async function processDeposit({ acc_id, amount, mode = 'ONLINE', description = n
     const updatedAccount = updateRes.rows[0];
 
     // 3. Record Transaction Ledger Entry
-    const transDesc = description || `Deposit via ${mode}`;
+    const transDesc = description || `Deposit via ${depositMode}`;
     const transRes = await client.query(`
       INSERT INTO "transaction" (acc_id, type, amount, mode, status, description, processed_by_emp_id)
       VALUES ($1, 'DEPOSIT', $2, $3, 'SUCCESS', $4, $5)
       RETURNING *
-    `, [accountId, depositAmount, mode, transDesc, emp_id]);
+    `, [accountId, depositAmount, depositMode, transDesc, emp_id]);
 
     const transaction = transRes.rows[0];
 
@@ -89,13 +94,18 @@ async function processDeposit({ acc_id, amount, mode = 'ONLINE', description = n
  * Atomic Withdrawal
  */
 async function processWithdrawal({ acc_id, amount, mode = 'ATM', description = null, emp_id = null, ipAddress = null }) {
+  const withdrawMode = String(mode || 'ATM').trim().toUpperCase();
+  const validModes = ['ONLINE', 'ATM', 'CASH', 'BRANCH', 'UPI', 'NEFT', 'RTGS'];
+  if (!validModes.includes(withdrawMode)) {
+    throw new AppError('Invalid transaction channel. Select Online, ATM, Cash, Branch, UPI, NEFT, or RTGS.', 400, null, 'INVALID_TRANSACTION_MODE', 'mode');
+  }
   const withdrawAmount = parseFloat(amount);
   if (isNaN(withdrawAmount) || withdrawAmount <= 0) {
     throw new AppError('Withdrawal amount must be a positive number.', 400);
   }
 
-  const accountId = parseInt(acc_id, 10);
-  if (isNaN(accountId)) {
+  const accountId = String(acc_id).trim();
+  if (!/^\d+$/.test(accountId)) {
     throw new AppError('Invalid account ID format.', 400);
   }
 
@@ -135,12 +145,12 @@ async function processWithdrawal({ acc_id, amount, mode = 'ATM', description = n
     const updatedAccount = updateRes.rows[0];
 
     // 3. Record Transaction
-    const transDesc = description || `Withdrawal via ${mode}`;
+    const transDesc = description || `Withdrawal via ${withdrawMode}`;
     const transRes = await client.query(`
       INSERT INTO "transaction" (acc_id, type, amount, mode, status, description, processed_by_emp_id)
       VALUES ($1, 'WITHDRAWAL', $2, $3, 'SUCCESS', $4, $5)
       RETURNING *
-    `, [accountId, withdrawAmount, mode, transDesc, emp_id]);
+    `, [accountId, withdrawAmount, withdrawMode, transDesc, emp_id]);
 
     const transaction = transRes.rows[0];
 
@@ -175,15 +185,20 @@ async function processWithdrawal({ acc_id, amount, mode = 'ATM', description = n
  * Atomic Inter-Account Transfer with Bilaterally Linked Transaction Entries
  */
 async function processTransfer({ from_acc, to_acc, amount, mode = 'ONLINE', description = null, emp_id = null, ipAddress = null }) {
+  const transferMode = String(mode || 'ONLINE').trim().toUpperCase();
+  const validModes = ['ONLINE', 'ATM', 'CASH', 'BRANCH', 'UPI', 'NEFT', 'RTGS'];
+  if (!validModes.includes(transferMode)) {
+    throw new AppError('Invalid transaction channel. Select Online, ATM, Cash, Branch, UPI, NEFT, or RTGS.', 400, null, 'INVALID_TRANSACTION_MODE', 'mode');
+  }
   const transferAmount = parseFloat(amount);
   if (isNaN(transferAmount) || transferAmount <= 0) {
     throw new AppError('Transfer amount must be a positive number.', 400);
   }
 
-  const fromAccId = parseInt(from_acc, 10);
-  const toAccId = parseInt(to_acc, 10);
+  const fromAccId = String(from_acc).trim();
+  const toAccId = String(to_acc).trim();
 
-  if (isNaN(fromAccId) || isNaN(toAccId)) {
+  if (!/^\d+$/.test(fromAccId) || !/^\d+$/.test(toAccId)) {
     throw new AppError('Source and destination account IDs must be valid numbers.', 400);
   }
 
@@ -193,8 +208,8 @@ async function processTransfer({ from_acc, to_acc, amount, mode = 'ONLINE', desc
 
   return await executeTransaction(async (client) => {
     // 1. Fetch both accounts in a deterministic order to prevent deadlocks
-    const firstId = Math.min(fromAccId, toAccId);
-    const secondId = Math.max(fromAccId, toAccId);
+    const firstId = BigInt(fromAccId) < BigInt(toAccId) ? fromAccId : toAccId;
+    const secondId = BigInt(fromAccId) < BigInt(toAccId) ? toAccId : fromAccId;
 
     const accountsRes = await client.query(`
       SELECT acc_id, balance, status, acc_type
@@ -203,8 +218,8 @@ async function processTransfer({ from_acc, to_acc, amount, mode = 'ONLINE', desc
       ORDER BY acc_id ASC
     `, [firstId, secondId]);
 
-    const source = accountsRes.rows.find((a) => a.acc_id === String(fromAccId) || a.acc_id === fromAccId);
-    const destination = accountsRes.rows.find((a) => a.acc_id === String(toAccId) || a.acc_id === toAccId);
+    const source = accountsRes.rows.find((a) => String(a.acc_id) === fromAccId);
+    const destination = accountsRes.rows.find((a) => String(a.acc_id) === toAccId);
 
     if (!source) {
       throw new AppError(`Source account ID ${fromAccId} not found.`, 404);
@@ -246,7 +261,7 @@ async function processTransfer({ from_acc, to_acc, amount, mode = 'ONLINE', desc
       INSERT INTO "transaction" (acc_id, type, amount, mode, status, related_acc_id, description, processed_by_emp_id)
       VALUES ($1, 'TRANSFER', $2, $3, 'SUCCESS', $4, $5, $6)
       RETURNING *
-    `, [fromAccId, transferAmount, mode, toAccId, leg1Desc, emp_id]);
+    `, [fromAccId, transferAmount, transferMode, toAccId, leg1Desc, emp_id]);
     const leg1 = leg1Res.rows[0];
 
     // Leg 2 (Credit / Inflow) - directly linked to Leg 1
@@ -254,7 +269,7 @@ async function processTransfer({ from_acc, to_acc, amount, mode = 'ONLINE', desc
       INSERT INTO "transaction" (acc_id, type, amount, mode, status, related_acc_id, related_trans_id, description, processed_by_emp_id)
       VALUES ($1, 'TRANSFER', $2, $3, 'SUCCESS', $4, $5, $6, $7)
       RETURNING *
-    `, [toAccId, transferAmount, mode, fromAccId, leg1.t_id, leg2Desc, emp_id]);
+    `, [toAccId, transferAmount, transferMode, fromAccId, leg1.t_id, leg2Desc, emp_id]);
     const leg2 = leg2Res.rows[0];
 
     // Symmetrically back-link Leg 1 to Leg 2
@@ -305,6 +320,20 @@ async function processTransfer({ from_acc, to_acc, amount, mode = 'ONLINE', desc
  * Record Loan Repayment Installment
  */
 async function processLoanPayment({ l_id, amount, principal_amount, interest_amount, payment_mode = 'ONLINE', remarks = null, emp_id = null, ipAddress = null }) {
+  let mode = String(payment_mode || 'ONLINE').trim().toUpperCase();
+  if (['UPI', 'NEFT', 'RTGS', 'NETBANKING', 'IMPS'].includes(mode)) {
+    mode = 'ONLINE';
+  }
+  const validModes = ['ONLINE', 'AUTO_DEBIT', 'CASH', 'CHEQUE'];
+  if (!validModes.includes(mode)) {
+    throw new AppError(
+      'Invalid payment mode for loan installment. Select Online, Auto Debit, Cash, or Cheque.',
+      400,
+      null,
+      'INVALID_LOAN_PAYMENT_MODE',
+      'payment_mode'
+    );
+  }
   const totalAmount = parseFloat(amount);
   const principal = parseFloat(principal_amount);
   const interest = parseFloat(interest_amount);
@@ -321,14 +350,17 @@ async function processLoanPayment({ l_id, amount, principal_amount, interest_amo
 
   // Component Arithmetic check
   if (Math.abs(totalAmount - (principal + interest)) > 0.01) {
-    throw new AppError('Total payment amount must equal principal plus interest components.', 400, {
-      providedAmount: totalAmount,
-      sumComponents: principal + interest
-    });
+    throw new AppError(
+      'Total payment amount must equal principal plus interest components.',
+      400,
+      { providedAmount: totalAmount, sumComponents: principal + interest },
+      'INVALID_PAYMENT_COMPONENTS',
+      'amount'
+    );
   }
 
-  const loanId = parseInt(l_id, 10);
-  if (isNaN(loanId)) {
+  const loanId = String(l_id).trim();
+  if (!/^\d+$/.test(loanId)) {
     throw new AppError('Invalid loan ID format.', 400);
   }
 
@@ -354,7 +386,7 @@ async function processLoanPayment({ l_id, amount, principal_amount, interest_amo
       INSERT INTO loan_payment (l_id, amount, principal_amount, interest_amount, payment_mode, status, remarks)
       VALUES ($1, $2, $3, $4, $5, 'SUCCESS', $6)
       RETURNING *
-    `, [loanId, totalAmount, principal, interest, payment_mode, remarks || 'EMI Repayment']);
+    `, [loanId, totalAmount, principal, interest, mode, remarks || 'EMI Repayment']);
 
     const payment = paymentRes.rows[0];
 
@@ -373,7 +405,7 @@ async function processLoanPayment({ l_id, amount, principal_amount, interest_amo
         amount: totalAmount,
         principal,
         interest,
-        payment_mode
+        payment_mode: mode
       },
       ipAddress
     });

@@ -30,6 +30,9 @@ const API_BASE = `${import.meta.env.VITE_API_URL || ''}/api`;
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
+  field?: string;
+  constraint?: string;
   details?: any;
 
   constructor(message: string, status: number, details?: any) {
@@ -37,12 +40,15 @@ export class ApiError extends Error {
     this.name = 'ApiError';
     this.status = status;
     this.details = details;
+    this.code = details?.code;
+    this.field = details?.field;
+    this.constraint = details?.constraint;
   }
 }
 
 function extractErrorMessage(errorData: any, status: number): string {
-  if (errorData?.error) return errorData.error;
   if (errorData?.message) return errorData.message;
+  if (errorData?.error) return errorData.error;
   if (errorData?.detail) return errorData.detail;
   return `Request failed with status ${status}`;
 }

@@ -1,13 +1,33 @@
-# Finora frontend
+# Finora DA2 — Frontend Interface
 
-This is a vanilla HTML/CSS/JS frontend for the Banking Management System. It uses the existing Express API and requires no new frontend dependency.
+This directory contains the client-side user interface for **Finora DA2**, built as a lightweight, framework-free single-page application using vanilla HTML5, CSS3, and modern JavaScript (ES6+).
 
-## Run
+---
 
-1. Start Oracle and the existing backend configuration.
-2. Ensure `.env` contains the Oracle settings documented in the project README.
-3. Run `npm install` once.
-4. Run `npm start`.
-5. Open `http://localhost:5000`.
+## Directory Contents
 
-The frontend calls the existing `/api` endpoints for dashboard data, customers, accounts, transactions, loans, credit cards and branches. Deposit/withdrawal calls use the existing backend endpoints and therefore the existing PL/SQL procedures.
+| File Name | Description |
+| :--- | :--- |
+| `index.html` | Structural shell, topbar navigation, tabular data views, and prefilled modal dialogs. |
+| `styles.css` | Custom CSS design system, responsive grid/flexbox layouts, neon dark topbar, and SVG charts. |
+| `app.js` | Client-side routing, DOM event listeners, asynchronous `fetch()` API calls to `/api/*`, dynamic search filtering, and SVG chart generators. |
+
+---
+
+## Running the Frontend
+
+The frontend is served directly by the Express.js backend as static assets:
+
+1. Ensure the Oracle Database is running and accessible.
+2. Configure `.env` in `DBMS-DA-2/backend/.env` with your database credentials.
+3. In `DBMS-DA-2/backend`, run:
+   ```bash
+   npm install
+   npm start
+   ```
+4. Open your browser and navigate to:
+   ```text
+   http://localhost:5000
+   ```
+
+All API requests are made to relative `/api/*` endpoints handled by the same Express server, requiring no CORS proxies or frontend bundling tools.

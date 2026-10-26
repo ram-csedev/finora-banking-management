@@ -88,7 +88,7 @@ export const LoansPage: React.FC = () => {
   const [paymentForm, setPaymentForm] = useState({
     principal_amount: '10000',
     interest_amount: '2500',
-    payment_mode: 'UPI',
+    payment_mode: 'ONLINE',
     remarks: 'Monthly installment payment',
   });
   const [isSubmittingPayment, setIsSubmittingPayment] = useState(false);
@@ -137,7 +137,7 @@ export const LoansPage: React.FC = () => {
   const [isEditPaymentModal, setIsEditPaymentModal] = useState(false);
   const [selectedEditPayment, setSelectedEditPayment] = useState<LoanPayment | null>(null);
   const [editPaymentForm, setEditPaymentForm] = useState({
-    payment_mode: 'UPI',
+    payment_mode: 'ONLINE',
     remarks: '',
   });
   const [isSubmittingEditPayment, setIsSubmittingEditPayment] = useState(false);
