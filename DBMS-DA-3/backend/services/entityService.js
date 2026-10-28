@@ -12,23 +12,26 @@ const ENTITY_CONFIG = {
   branch: {
     table: 'branch',
     pk: 'b_id',
+    idPrefix: 'BR-',
     allowedFields: ['b_id', 'branch_name', 'city', 'state', 'pincode', 'ifsc', 'contact', 'status'],
     updatableFields: ['branch_name', 'city', 'state', 'pincode', 'contact', 'status'],
-    searchFields: ['branch_name', 'city', 'ifsc', 'status']
+    searchFields: ['b_id', 'branch_name', 'city', 'state', 'pincode', 'ifsc', 'contact', 'status']
   },
   employee: {
     table: 'employee',
     pk: 'emp_id',
+    idPrefix: 'EMP-',
     allowedFields: ['emp_id', 'first_name', 'last_name', 'salary', 'hire_date', 'b_id', 'email', 'status'],
     updatableFields: ['first_name', 'last_name', 'salary', 'hire_date', 'b_id', 'email', 'status'],
-    searchFields: ['first_name', 'last_name', 'email', 'status']
+    searchFields: ['emp_id', 'first_name', 'last_name', 'salary', 'b_id', 'email', 'status']
   },
   customer: {
     table: 'customer',
     pk: 'cid',
+    idPrefix: 'CUST-',
     allowedFields: ['cid', 'pan', 'first_name', 'last_name', 'city', 'state', 'pincode', 'dob', 'emp_id', 'email', 'status'],
     updatableFields: ['first_name', 'last_name', 'city', 'state', 'pincode', 'dob', 'emp_id', 'email', 'status'],
-    searchFields: ['first_name', 'last_name', 'pan', 'city', 'email', 'status']
+    searchFields: ['cid', 'pan', 'first_name', 'last_name', 'city', 'state', 'pincode', 'email', 'status']
   },
   customer_phone: {
     table: 'customer_phone',
@@ -36,14 +39,15 @@ const ENTITY_CONFIG = {
     compositePks: ['cid', 'phone'],
     allowedFields: ['cid', 'phone', 'phone_type', 'is_primary'],
     updatableFields: ['phone', 'phone_type', 'is_primary'],
-    searchFields: ['phone']
+    searchFields: ['cid', 'phone', 'phone_type']
   },
   account: {
     table: 'account',
     pk: 'acc_id',
+    idPrefix: 'ACC-',
     allowedFields: ['acc_id', 'b_id', 'balance', 'status', 'acc_type'],
     updatableFields: ['b_id', 'status', 'acc_type'], // Balance is ledger-driven only
-    searchFields: ['status', 'acc_type']
+    searchFields: ['acc_id', 'b_id', 'balance', 'status', 'acc_type']
   },
   account_holder: {
     table: 'account_holder',
@@ -51,65 +55,234 @@ const ENTITY_CONFIG = {
     compositePks: ['acc_id', 'cid'],
     allowedFields: ['acc_id', 'cid', 'ownership_role', 'is_primary', 'share_percentage'],
     updatableFields: ['ownership_role', 'is_primary', 'share_percentage'],
-    searchFields: ['ownership_role']
+    searchFields: ['acc_id', 'cid', 'ownership_role']
   },
   nominee: {
     table: 'nominee',
     pk: 'n_id',
+    idPrefix: 'NOM-',
     allowedFields: ['n_id', 'acc_id', 'cid', 'first_name', 'last_name', 'relationship', 'dob', 'contact_phone'],
     updatableFields: ['first_name', 'last_name', 'relationship', 'dob', 'contact_phone'],
-    searchFields: ['first_name', 'last_name', 'relationship']
+    searchFields: ['n_id', 'acc_id', 'cid', 'first_name', 'last_name', 'relationship', 'contact_phone']
   },
   creditcard: {
     table: 'creditcard',
     pk: 'pno',
+    idPrefix: 'CC-',
     allowedFields: ['pno', 'cid', 'type', 'card_limit', 'expiry', 'status', 'cvv'],
     updatableFields: ['type', 'card_limit', 'expiry', 'status'], // pno, cid, cvv protected
-    searchFields: ['type', 'status']
+    searchFields: ['pno', 'cid', 'type', 'card_limit', 'expiry', 'status']
   },
   loan: {
     table: 'loan',
     pk: 'l_id',
+    idPrefix: 'LN-',
     allowedFields: ['l_id', 'cid', 'l_type', 'amount', 'interest', 'term', 'start_date', 'status', 'assigned_emp_id'],
     updatableFields: ['interest', 'term', 'status', 'assigned_emp_id', 'l_type'], // amount and start_date protected
-    searchFields: ['l_type', 'status']
+    searchFields: ['l_id', 'cid', 'l_type', 'amount', 'interest', 'term', 'status', 'assigned_emp_id']
   },
   loan_payment: {
     table: 'loan_payment',
     pk: 'payment_id',
+    idPrefix: 'PAY-',
     allowedFields: ['payment_id', 'l_id', 'payment_date', 'amount', 'principal_amount', 'interest_amount', 'payment_mode', 'status', 'remarks'],
     updatableFields: ['remarks', 'payment_mode'], // amounts and loan pointers protected
-    searchFields: ['payment_mode', 'status']
+    searchFields: ['payment_id', 'l_id', 'amount', 'payment_mode', 'status', 'remarks']
   },
   beneficiary: {
     table: 'beneficiary',
     pk: 'beneficiary_id',
+    idPrefix: 'BEN-',
     allowedFields: ['beneficiary_id', 'cid', 'nickname', 'beneficiary_name', 'destination_account_num', 'destination_ifsc', 'bank_name', 'internal_acc_id', 'is_verified'],
     updatableFields: ['nickname', 'beneficiary_name', 'destination_account_num', 'destination_ifsc', 'bank_name', 'internal_acc_id', 'is_verified'],
-    searchFields: ['nickname', 'beneficiary_name', 'destination_ifsc']
+    searchFields: ['beneficiary_id', 'cid', 'nickname', 'beneficiary_name', 'destination_account_num', 'destination_ifsc', 'bank_name']
   },
   transaction: {
     table: 'transaction',
     pk: 't_id',
+    idPrefix: 'TXN-',
     allowedFields: ['t_id', 'acc_id', 'trans_date', 'type', 'amount', 'mode', 'status', 'related_acc_id', 'related_trans_id', 'description', 'processed_by_emp_id'],
     updatableFields: ['description'], // Only narration memo is editable; ledger amounts/accounts immutable
-    searchFields: ['type', 'mode', 'status', 'description']
+    searchFields: ['description', 'type', 'mode', 'status']
   },
   audit_log: {
     table: 'audit_log',
     pk: 'log_id',
     allowedFields: ['log_id', 'emp_id', 'actor_type', 'actor_id', 'action', 'entity_name', 'entity_id', 'details', 'ip_address'],
     updatableFields: [], // Strictly immutable audit records
-    searchFields: ['action', 'entity_name', 'actor_id']
+    searchFields: ['log_id', 'emp_id', 'actor_type', 'actor_id', 'action', 'entity_name', 'entity_id', 'details', 'ip_address']
   },
   responsible_for: {
     table: 'responsible_for',
     pk: 'rf_id',
+    idPrefix: 'RF-',
     allowedFields: ['rf_id', 'emp_id', 'b_id', 'role_type', 'l_id', 't_id', 'assigned_date', 'status', 'notes'],
     updatableFields: ['emp_id', 'b_id', 'role_type', 'status', 'notes', 'l_id', 't_id'],
-    searchFields: ['role_type', 'status']
+    searchFields: ['rf_id', 'emp_id', 'b_id', 'role_type', 'status', 'notes']
   }
 };
+
+/**
+ * Build rich search condition expressions for a specific token/term parameter index
+ */
+function buildTokenConditions(cfg, paramIndexStr) {
+  const conds = [];
+  const table = `"${cfg.table}"`;
+
+  // 1. Direct fields: text substring matching
+  if (cfg.searchFields && cfg.searchFields.length > 0) {
+    for (const f of cfg.searchFields) {
+      conds.push(`${table}."${f}"::text ILIKE ('%' || ${paramIndexStr} || '%')`);
+    }
+  }
+
+  // 2. Prefixed IDs and Primary Key (for non-transaction entities)
+  if (cfg.idPrefix && cfg.pk && cfg.table !== 'transaction') {
+    conds.push(`(${table}."${cfg.pk}"::text = ${paramIndexStr} OR ('${cfg.idPrefix}' || ${table}."${cfg.pk}"::text) = ${paramIndexStr} OR ('${cfg.idPrefix}' || ${table}."${cfg.pk}"::text) ILIKE (${paramIndexStr} || '%') OR ('${cfg.idPrefix}' || ${table}."${cfg.pk}"::text) ILIKE ('%' || ${paramIndexStr} || '%'))`);
+  }
+
+  // 3. Full name concatenation for entities with first_name and last_name
+  if (cfg.allowedFields.includes('first_name') && cfg.allowedFields.includes('last_name')) {
+    conds.push(`concat(${table}."first_name", ' ', coalesce(${table}."last_name", '')) ILIKE ('%' || ${paramIndexStr} || '%')`);
+    conds.push(`concat(coalesce(${table}."last_name", ''), ' ', ${table}."first_name") ILIKE ('%' || ${paramIndexStr} || '%')`);
+  }
+
+  // 4. Entity-specific relationships
+  if (cfg.table === 'customer') {
+    // Search customer's phone numbers
+    conds.push(`EXISTS (SELECT 1 FROM customer_phone cp WHERE cp.cid = ${table}.cid AND cp.phone ILIKE ('%' || ${paramIndexStr} || '%'))`);
+  } else if (cfg.table === 'account') {
+    // Search account holders (customer name, PAN, email, CID)
+    conds.push(`EXISTS (
+      SELECT 1 FROM account_holder ah
+      JOIN customer c ON ah.cid = c.cid
+      WHERE ah.acc_id = ${table}.acc_id AND (
+        c.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(c.first_name, ' ', coalesce(c.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.pan ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.email ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.cid::text = ${paramIndexStr} OR
+        ('CUST-' || c.cid::text) ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+    // Search domiciled branch (branch name, city, IFSC)
+    conds.push(`EXISTS (
+      SELECT 1 FROM branch b
+      WHERE b.b_id = ${table}.b_id AND (
+        b.branch_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.city ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.ifsc ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+  } else if (cfg.table === 'transaction') {
+    // 1. Transaction ID: Exact match or formatted TXN- prefix (avoids false-positive substring matches on 19-digit snowflake IDs)
+    conds.push(`(${table}.t_id::text = ${paramIndexStr} OR ('TXN-' || ${table}.t_id::text) = ${paramIndexStr} OR ('TXN-' || ${table}.t_id::text) ILIKE (${paramIndexStr} || '%'))`);
+
+    // 2. Direct Account ID match or formatted ACC- prefix match
+    conds.push(`(${table}.acc_id::text = ${paramIndexStr} OR ('ACC-' || ${table}.acc_id::text) = ${paramIndexStr} OR ('ACC-' || ${table}.acc_id::text) ILIKE ('%' || ${paramIndexStr} || '%'))`);
+
+    // 3. Related Account ID match (for transfers)
+    conds.push(`(${table}.related_acc_id IS NOT NULL AND (${table}.related_acc_id::text = ${paramIndexStr} OR ('ACC-' || ${table}.related_acc_id::text) = ${paramIndexStr} OR ('ACC-' || ${table}.related_acc_id::text) ILIKE ('%' || ${paramIndexStr} || '%')))`);
+
+    // 4. Cross-entity: Processed Teller / Employee
+    conds.push(`EXISTS (
+      SELECT 1 FROM employee e
+      WHERE e.emp_id = ${table}.processed_by_emp_id AND (
+        e.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        e.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(e.first_name, ' ', coalesce(e.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        e.emp_id::text = ${paramIndexStr} OR
+        ('EMP-' || e.emp_id::text) ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+
+    // 5. Cross-entity: Account Holder Customer (CID, PAN, Name)
+    conds.push(`EXISTS (
+      SELECT 1 FROM account_holder ah
+      JOIN customer c ON ah.cid = c.cid
+      WHERE (ah.acc_id = ${table}.acc_id OR ah.acc_id = ${table}.related_acc_id) AND (
+        c.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(c.first_name, ' ', coalesce(c.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.pan ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.cid::text = ${paramIndexStr} OR
+        ('CUST-' || c.cid::text) ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+  } else if (cfg.table === 'loan') {
+    // Search borrowing customer name, PAN, CID
+    conds.push(`EXISTS (
+      SELECT 1 FROM customer c
+      WHERE c.cid = ${table}.cid AND (
+        c.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(c.first_name, ' ', coalesce(c.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.pan ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.cid::text = ${paramIndexStr} OR
+        ('CUST-' || c.cid::text) ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+    // Search loan officer / officer branch
+    conds.push(`EXISTS (
+      SELECT 1 FROM employee e
+      LEFT JOIN branch b ON e.b_id = b.b_id
+      WHERE e.emp_id = ${table}.assigned_emp_id AND (
+        e.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        e.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(e.first_name, ' ', coalesce(e.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.branch_name ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+  } else if (cfg.table === 'creditcard') {
+    // Search cardholder customer name, PAN, CID
+    conds.push(`EXISTS (
+      SELECT 1 FROM customer c
+      WHERE c.cid = ${table}.cid AND (
+        c.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(c.first_name, ' ', coalesce(c.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.pan ILIKE ('%' || ${paramIndexStr} || '%') OR
+        c.cid::text = ${paramIndexStr} OR
+        ('CUST-' || c.cid::text) ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+  } else if (cfg.table === 'employee') {
+    // Search assigned branch name, city, IFSC
+    conds.push(`EXISTS (
+      SELECT 1 FROM branch b
+      WHERE b.b_id = ${table}.b_id AND (
+        b.branch_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.city ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.ifsc ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+  } else if (cfg.table === 'responsible_for') {
+    // Search assigned staff member name, email, ID
+    conds.push(`EXISTS (
+      SELECT 1 FROM employee e
+      WHERE e.emp_id = ${table}.emp_id AND (
+        e.first_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        e.last_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        concat(e.first_name, ' ', coalesce(e.last_name, '')) ILIKE ('%' || ${paramIndexStr} || '%') OR
+        e.email ILIKE ('%' || ${paramIndexStr} || '%') OR
+        e.emp_id::text = ${paramIndexStr} OR
+        ('EMP-' || e.emp_id::text) ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+    // Search operational branch name, city, IFSC
+    conds.push(`EXISTS (
+      SELECT 1 FROM branch b
+      WHERE b.b_id = ${table}.b_id AND (
+        b.branch_name ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.city ILIKE ('%' || ${paramIndexStr} || '%') OR
+        b.ifsc ILIKE ('%' || ${paramIndexStr} || '%')
+      )
+    )`);
+  }
+
+  return conds;
+}
 
 /**
  * Validate entity name against strict allowlist
@@ -137,11 +310,44 @@ async function listEntities(entityName, { page = 1, limit = 50, search = '', sor
   let params = [];
   let paramIdx = 1;
 
-  if (search && cfg.searchFields.length > 0) {
-    const searchConditions = cfg.searchFields.map((f) => `"${f}"::text ILIKE $${paramIdx}`);
-    whereClauses.push(`(${searchConditions.join(' OR ')})`);
-    params.push(`%${search}%`);
-    paramIdx++;
+  const trimmedSearch = String(search || '').trim();
+  if (trimmedSearch) {
+    const tokens = trimmedSearch.split(/\s+/).filter(Boolean);
+    if (tokens.length === 1) {
+      // Single token search: match across direct fields, prefixed IDs, names, relations
+      const conds = buildTokenConditions(cfg, `$${paramIdx}`);
+      if (conds.length > 0) {
+        whereClauses.push(`(${conds.join(' OR ')})`);
+        params.push(tokens[0]);
+        paramIdx++;
+      }
+    } else if (tokens.length > 1) {
+      // Multi-token search: match as exact full phrase OR all tokens matching across attributes
+      // 1. Full phrase condition:
+      const phraseParamIdx = paramIdx;
+      const phraseConds = buildTokenConditions(cfg, `$${phraseParamIdx}`);
+      params.push(trimmedSearch);
+      paramIdx++;
+
+      // 2. Token-by-token conditions (all individual tokens must match):
+      const tokenClauseList = [];
+      for (const tok of tokens) {
+        const tokConds = buildTokenConditions(cfg, `$${paramIdx}`);
+        if (tokConds.length > 0) {
+          tokenClauseList.push(`(${tokConds.join(' OR ')})`);
+          params.push(tok);
+          paramIdx++;
+        }
+      }
+
+      if (phraseConds.length > 0 && tokenClauseList.length > 0) {
+        whereClauses.push(`((${phraseConds.join(' OR ')}) OR (${tokenClauseList.join(' AND ')}))`);
+      } else if (phraseConds.length > 0) {
+        whereClauses.push(`(${phraseConds.join(' OR ')})`);
+      } else if (tokenClauseList.length > 0) {
+        whereClauses.push(`(${tokenClauseList.join(' AND ')})`);
+      }
+    }
   }
 
   // Exact matching for valid entity fields in filters (with canonical normalization)
@@ -176,7 +382,7 @@ async function listEntities(entityName, { page = 1, limit = 50, search = '', sor
           }
         }
 
-        whereClauses.push(`"${lowerKey}"::text = ${paramIdx}`);
+        whereClauses.push(`"${lowerKey}"::text = $${paramIdx}`);
         params.push(filterVal);
         paramIdx++;
       }

@@ -557,7 +557,7 @@ export const LoansPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <Input
                 icon={<Search className="w-4 h-4 text-obsidian-400" />}
-                placeholder="Search loan type, status..."
+                placeholder="Search by loan ID, customer, type, status..."
                 value={loanSearch}
                 onChange={(e) => {
                   setLoanSearch(e.target.value);
@@ -762,7 +762,7 @@ export const LoansPage: React.FC = () => {
           <Card className="p-4 border-obsidian-750">
             <Input
               icon={<Search className="w-4 h-4 text-obsidian-400" />}
-              placeholder="Search credit cards by type, status..."
+              placeholder="Search by card number, customer, type, status..."
               value={cardSearch}
               onChange={(e) => {
                 setCardSearch(e.target.value);

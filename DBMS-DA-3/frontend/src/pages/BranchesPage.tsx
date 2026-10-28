@@ -283,7 +283,7 @@ export const BranchesPage: React.FC = () => {
       <Card className="p-4 border-obsidian-750">
         <Input
           icon={<Search className="w-4 h-4 text-obsidian-400" />}
-          placeholder="Search branch by name, city, or IFSC code..."
+          placeholder="Search by branch name, ID, city, state, or IFSC..."
           value={searchQuery}
           onChange={(e) => {
             setSearchQuery(e.target.value);

@@ -521,7 +521,7 @@ export const AccountsPage: React.FC = () => {
           <div>
             <Input
               icon={<Search className="w-4 h-4 text-obsidian-400" />}
-              placeholder="Search account type, status..."
+              placeholder="Search by account ID, customer, type, status, branch..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);

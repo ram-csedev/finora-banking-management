@@ -369,7 +369,7 @@ export const TransactionsPage: React.FC = () => {
           <div>
             <Input
               icon={<Search className="w-4 h-4 text-obsidian-400" />}
-              placeholder="Search description, mode, status..."
+              placeholder="Search by TXN ID, account, description, type, mode, status..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -485,7 +485,15 @@ export const TransactionsPage: React.FC = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-mono text-white text-xs font-semibold">
-                      ACC-{tx.acc_id}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>ACC-{tx.acc_id}</span>
+                        {tx.related_acc_id && (
+                          <span className="text-obsidian-400 font-normal flex items-center gap-1 text-[11px]" title={`Transfer Counterpart: ACC-${tx.related_acc_id}`}>
+                            <span className="text-cyan-400">→</span>
+                            <span className="text-cyan-300">ACC-{tx.related_acc_id}</span>
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className={`font-mono font-bold text-sm ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {isCredit ? '+' : '-'}₹{parseFloat(String(tx.amount)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}

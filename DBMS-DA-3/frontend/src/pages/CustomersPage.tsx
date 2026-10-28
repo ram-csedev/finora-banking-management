@@ -571,7 +571,7 @@ export const CustomersPage: React.FC = () => {
           <div className="md:col-span-2">
             <Input
               icon={<Search className="w-4 h-4 text-obsidian-400" />}
-              placeholder="Search by name, PAN, email, or city..."
+              placeholder="Search by name, CID, PAN, email, phone, city..."
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);

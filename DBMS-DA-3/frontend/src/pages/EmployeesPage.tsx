@@ -473,7 +473,7 @@ export const EmployeesPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Input
                 icon={<Search className="w-4 h-4 text-obsidian-400" />}
-                placeholder="Search staff by name or email..."
+                placeholder="Search staff by name, ID, email, or branch..."
                 value={empSearch}
                 onChange={(e) => {
                   setEmpSearch(e.target.value);
@@ -651,7 +651,7 @@ export const EmployeesPage: React.FC = () => {
           <Card className="p-4 border-obsidian-750">
             <Input
               icon={<Search className="w-4 h-4 text-obsidian-400" />}
-              placeholder="Search duties by role type, status..."
+              placeholder="Search duties by role, staff name, branch, or notes..."
               value={dutySearch}
               onChange={(e) => {
                 setDutySearch(e.target.value);
